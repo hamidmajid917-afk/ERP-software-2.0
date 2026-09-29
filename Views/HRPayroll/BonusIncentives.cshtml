@@ -1,0 +1,1188 @@
+@model List<ERP_System.Models.BonusIncentive>
+
+@{
+    Layout = "_DashboardLayout";
+    ViewData["Title"] = "Bonus & Incentive Tracker";
+
+    var employees = ViewBag.ActiveEmployees as List<ERP_System.Models.User>
+                    ?? new List<ERP_System.Models.User>();
+
+    var totalRecords = Model?.Count ?? 0;
+
+    var pendingCount = Model?.Count(m =>
+        m.Status == "Draft" || m.Status == "Submitted") ?? 0;
+
+    var approvedTotal = ViewBag.ApprovedTotal ?? 0;
+}
+
+<style>
+    /* =========================================================
+           BONUS & INCENTIVE MANAGEMENT
+           ========================================================= */
+
+    .bonus-page {
+        animation: bonusPageFade .55s ease;
+    }
+
+    @@keyframes bonusPageFade {
+        from {
+            opacity: 0;
+            transform: translateY(12px);
+        }
+
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    /* -----------------------------
+           Header
+        ------------------------------ */
+
+    .bonus-hero {
+        position: relative;
+        overflow: hidden;
+        padding: 1.7rem 1.8rem;
+        border-radius: 22px;
+        color: #fff;
+        background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 48%, #60a5fa 100%);
+        box-shadow: 0 18px 45px rgba(37, 99, 235, .18);
+        margin-bottom: 1.5rem;
+    }
+
+        .bonus-hero::before {
+            content: "";
+            position: absolute;
+            width: 230px;
+            height: 230px;
+            border-radius: 50%;
+            right: -65px;
+            top: -100px;
+            background: rgba(255,255,255,.10);
+        }
+
+        .bonus-hero::after {
+            content: "";
+            position: absolute;
+            width: 140px;
+            height: 140px;
+            border-radius: 50%;
+            right: 150px;
+            bottom: -90px;
+            background: rgba(255,255,255,.07);
+        }
+
+    .bonus-hero-content {
+        position: relative;
+        z-index: 2;
+    }
+
+    .bonus-hero-icon {
+        width: 55px;
+        height: 55px;
+        border-radius: 17px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(255,255,255,.16);
+        border: 1px solid rgba(255,255,255,.18);
+        font-size: 1.35rem;
+        backdrop-filter: blur(10px);
+    }
+
+    .bonus-title {
+        font-size: 1.45rem;
+        font-weight: 800;
+        margin: 0;
+        letter-spacing: -.3px;
+    }
+
+    .bonus-subtitle {
+        color: rgba(255,255,255,.78);
+        font-size: .84rem;
+        margin-top: .3rem;
+        margin-bottom: 0;
+    }
+
+    .bonus-breadcrumb {
+        margin: .65rem 0 0;
+    }
+
+        .bonus-breadcrumb .breadcrumb-item,
+        .bonus-breadcrumb .breadcrumb-item a {
+            color: rgba(255,255,255,.75);
+            font-size: .78rem;
+            text-decoration: none;
+        }
+
+            .bonus-breadcrumb .breadcrumb-item.active {
+                color: #fff;
+            }
+
+            .bonus-breadcrumb .breadcrumb-item + .breadcrumb-item::before {
+                color: rgba(255,255,255,.45);
+            }
+
+    .bonus-add-btn {
+        position: relative;
+        z-index: 3;
+        background: #fff;
+        color: #2563eb;
+        border: 0;
+        font-weight: 700;
+        border-radius: 12px;
+        padding: .7rem 1rem;
+        box-shadow: 0 8px 22px rgba(0,0,0,.12);
+        transition: all .25s ease;
+        white-space: nowrap;
+    }
+
+        .bonus-add-btn:hover {
+            color: #1d4ed8;
+            transform: translateY(-3px);
+            box-shadow: 0 14px 28px rgba(0,0,0,.16);
+        }
+
+    /* -----------------------------
+           Alerts
+        ------------------------------ */
+
+    .bonus-alert {
+        border: 0;
+        border-radius: 16px;
+        padding: 1rem 1.1rem;
+        box-shadow: 0 8px 25px rgba(15,23,42,.06);
+        animation: alertSlide .4s ease;
+    }
+
+    @@keyframes alertSlide {
+        from {
+            opacity: 0;
+            transform: translateY(-10px);
+        }
+
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    /* -----------------------------
+           Statistics
+        ------------------------------ */
+
+    .bonus-stat-card {
+        position: relative;
+        overflow: hidden;
+        min-height: 125px;
+        padding: 1.25rem;
+        border-radius: 20px;
+        background: #fff;
+        border: 1px solid rgba(15,23,42,.07);
+        box-shadow: 0 8px 25px rgba(15,23,42,.05);
+        transition: transform .25s ease, box-shadow .25s ease;
+    }
+
+        .bonus-stat-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 18px 35px rgba(15,23,42,.10);
+        }
+
+        .bonus-stat-card::after {
+            content: "";
+            position: absolute;
+            width: 110px;
+            height: 110px;
+            border-radius: 50%;
+            right: -35px;
+            bottom: -45px;
+            opacity: .35;
+        }
+
+    .stat-card-primary::after {
+        background: #dbeafe;
+    }
+
+    .stat-card-success::after {
+        background: #dcfce7;
+    }
+
+    .stat-card-warning::after {
+        background: #fef3c7;
+    }
+
+    .stat-label {
+        color: #64748b;
+        font-size: .78rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: .35px;
+        margin-bottom: .45rem;
+    }
+
+    .stat-number {
+        color: #0f172a;
+        font-size: 1.65rem;
+        font-weight: 800;
+        line-height: 1;
+        margin: 0;
+    }
+
+    .stat-icon {
+        position: relative;
+        z-index: 2;
+        width: 50px;
+        height: 50px;
+        border-radius: 16px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.2rem;
+    }
+
+    .stat-icon-primary {
+        background: #eff6ff;
+        color: #2563eb;
+    }
+
+    .stat-icon-success {
+        background: #ecfdf5;
+        color: #16a34a;
+    }
+
+    .stat-icon-warning {
+        background: #fffbeb;
+        color: #d97706;
+    }
+
+    /* -----------------------------
+           Main Table Card
+        ------------------------------ */
+
+    .bonus-table-card {
+        background: #fff;
+        border: 1px solid rgba(15,23,42,.07);
+        border-radius: 22px;
+        box-shadow: 0 10px 30px rgba(15,23,42,.05);
+        overflow: hidden;
+    }
+
+    .bonus-table-header {
+        padding: 1.25rem 1.5rem;
+        border-bottom: 1px solid #edf0f5;
+    }
+
+    .bonus-section-title {
+        font-size: 1rem;
+        font-weight: 800;
+        color: #0f172a;
+        margin: 0;
+    }
+
+    .bonus-section-subtitle {
+        color: #94a3b8;
+        font-size: .76rem;
+        margin: .25rem 0 0;
+    }
+
+    .bonus-record-badge {
+        padding: .45rem .75rem;
+        border-radius: 10px;
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        color: #64748b;
+        font-size: .76rem;
+        font-weight: 700;
+    }
+
+    .bonus-table {
+        margin: 0;
+        font-size: .84rem;
+    }
+
+        .bonus-table thead th {
+            background: #f8fafc;
+            color: #64748b;
+            border-bottom: 1px solid #e9eef5;
+            padding: .95rem .9rem;
+            font-size: .71rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: .35px;
+            white-space: nowrap;
+        }
+
+        .bonus-table tbody td {
+            padding: 1rem .9rem;
+            border-color: #f0f2f5;
+            vertical-align: middle;
+        }
+
+        .bonus-table tbody tr {
+            transition: background .2s ease, transform .2s ease;
+        }
+
+            .bonus-table tbody tr:hover {
+                background: #f8fbff;
+            }
+
+    /* -----------------------------
+           Employee
+        ------------------------------ */
+
+    .bonus-employee {
+        display: flex;
+        align-items: center;
+        gap: .75rem;
+        min-width: 170px;
+    }
+
+    .bonus-avatar {
+        width: 40px;
+        height: 40px;
+        border-radius: 13px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #2563eb;
+        background: #eff6ff;
+        font-weight: 800;
+        font-size: .8rem;
+        flex-shrink: 0;
+    }
+
+    .bonus-employee-name {
+        color: #1e293b;
+        font-weight: 800;
+        font-size: .85rem;
+        margin-bottom: 2px;
+    }
+
+    .bonus-employee-code {
+        color: #94a3b8;
+        font-size: .72rem;
+    }
+
+    /* -----------------------------
+           Badges
+        ------------------------------ */
+
+    .bonus-type-badge,
+    .bonus-period-badge,
+    .bonus-status {
+        display: inline-flex;
+        align-items: center;
+        gap: .35rem;
+        border-radius: 9px;
+        padding: .42rem .65rem;
+        font-size: .72rem;
+        font-weight: 700;
+        white-space: nowrap;
+    }
+
+    .bonus-type-badge {
+        color: #2563eb;
+        background: #eff6ff;
+    }
+
+    .bonus-period-badge {
+        color: #475569;
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+    }
+
+    .status-paid {
+        background: #ecfdf5;
+        color: #15803d;
+    }
+
+    .status-approved {
+        background: #ecfeff;
+        color: #0891b2;
+    }
+
+    .status-pending {
+        background: #fffbeb;
+        color: #d97706;
+    }
+
+    .bonus-amount {
+        color: #15803d;
+        font-size: .92rem;
+        font-weight: 800;
+        white-space: nowrap;
+    }
+
+    .bonus-reason {
+        color: #64748b;
+        max-width: 230px;
+        font-size: .8rem;
+        line-height: 1.45;
+    }
+
+    /* -----------------------------
+           Action Buttons
+        ------------------------------ */
+
+    .bonus-approve-btn {
+        border: 1px solid #bbf7d0;
+        color: #15803d;
+        background: #f0fdf4;
+        border-radius: 9px;
+        font-size: .74rem;
+        font-weight: 700;
+        transition: all .2s ease;
+    }
+
+        .bonus-approve-btn:hover {
+            background: #16a34a;
+            border-color: #16a34a;
+            color: #fff;
+            transform: translateY(-2px);
+        }
+
+    .bonus-delete-btn {
+        width: 32px;
+        height: 32px;
+        border: 1px solid #fecaca;
+        background: #fff;
+        color: #dc2626;
+        border-radius: 9px;
+        transition: all .2s ease;
+    }
+
+        .bonus-delete-btn:hover {
+            background: #dc2626;
+            color: #fff;
+            transform: translateY(-2px);
+        }
+
+    /* -----------------------------
+           Empty State
+        ------------------------------ */
+
+    .bonus-empty {
+        padding: 3.5rem 1rem !important;
+    }
+
+    .bonus-empty-icon {
+        width: 68px;
+        height: 68px;
+        margin: 0 auto 1rem;
+        border-radius: 22px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #f1f5f9;
+        color: #94a3b8;
+        font-size: 1.7rem;
+    }
+
+    /* -----------------------------
+           Modal
+        ------------------------------ */
+
+    .bonus-modal .modal-content {
+        border: 0;
+        border-radius: 22px;
+        overflow: hidden;
+        box-shadow: 0 25px 70px rgba(15,23,42,.18);
+    }
+
+    .bonus-modal-header {
+        position: relative;
+        overflow: hidden;
+        color: #fff;
+        padding: 1.35rem 1.5rem;
+        background: linear-gradient(135deg, #1d4ed8, #2563eb);
+    }
+
+        .bonus-modal-header::after {
+            content: "";
+            position: absolute;
+            width: 130px;
+            height: 130px;
+            border-radius: 50%;
+            right: -35px;
+            top: -70px;
+            background: rgba(255,255,255,.10);
+        }
+
+    .bonus-modal-title {
+        position: relative;
+        z-index: 1;
+        font-weight: 800;
+        margin: 0;
+    }
+
+    .bonus-modal-subtitle {
+        position: relative;
+        z-index: 1;
+        color: rgba(255,255,255,.75);
+        font-size: .76rem;
+        margin: .25rem 0 0;
+    }
+
+    .bonus-modal .modal-body {
+        padding: 1.5rem;
+    }
+
+    .bonus-modal .modal-footer {
+        background: #f8fafc;
+        border-top: 1px solid #edf0f5;
+        padding: 1rem 1.5rem;
+    }
+
+    .bonus-form-label {
+        color: #475569;
+        font-size: .76rem;
+        font-weight: 800;
+        margin-bottom: .42rem;
+    }
+
+    .bonus-form-control,
+    .bonus-modal .form-select {
+        min-height: 40px;
+        border: 1px solid #dbe1ea;
+        border-radius: 10px;
+        font-size: .83rem;
+        box-shadow: none;
+        transition: all .2s ease;
+    }
+
+        .bonus-form-control:focus,
+        .bonus-modal .form-select:focus {
+            border-color: #60a5fa;
+            box-shadow: 0 0 0 .2rem rgba(37,99,235,.10);
+        }
+
+    .bonus-info-strip {
+        display: flex;
+        align-items: flex-start;
+        gap: .75rem;
+        padding: .9rem 1rem;
+        margin-bottom: 1.25rem;
+        border-radius: 13px;
+        background: #eff6ff;
+        border: 1px solid #dbeafe;
+    }
+
+    .bonus-info-icon {
+        color: #2563eb;
+        font-size: 1rem;
+        margin-top: 2px;
+    }
+
+    .bonus-info-text {
+        color: #475569;
+        font-size: .76rem;
+        line-height: 1.5;
+    }
+
+    .bonus-cancel-btn {
+        border-radius: 10px;
+        padding: .55rem 1.1rem;
+        font-size: .78rem;
+        font-weight: 700;
+    }
+
+    .bonus-save-btn {
+        border: 0;
+        border-radius: 10px;
+        padding: .6rem 1.2rem;
+        font-size: .78rem;
+        font-weight: 700;
+        background: linear-gradient(135deg, #2563eb, #1d4ed8);
+        box-shadow: 0 7px 15px rgba(37,99,235,.18);
+        transition: all .2s ease;
+    }
+
+        .bonus-save-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 22px rgba(37,99,235,.25);
+        }
+
+    /* -----------------------------
+           Responsive
+        ------------------------------ */
+
+    @@media (max-width: 767.98px) {
+        .bonus-hero {
+            padding: 1.25rem;
+            border-radius: 18px;
+        }
+
+        .bonus-title {
+            font-size: 1.15rem;
+        }
+
+        .bonus-subtitle {
+            font-size: .75rem;
+        }
+
+        .bonus-add-btn {
+            width: 100%;
+            margin-top: .5rem;
+        }
+
+        .bonus-hero-actions {
+            width: 100%;
+        }
+
+        .bonus-stat-card {
+            min-height: auto;
+        }
+
+        .bonus-table-header {
+            padding: 1rem;
+        }
+
+        .bonus-table-card {
+            border-radius: 17px;
+        }
+
+        .bonus-modal .modal-body {
+            padding: 1.1rem;
+        }
+
+        .bonus-modal .modal-footer {
+            padding: .85rem 1rem;
+        }
+
+            .bonus-modal .modal-footer .btn {
+                flex: 1;
+            }
+    }
+</style>
+
+<div class="container-fluid py-4 text-start bonus-page">
+
+    <!-- SUCCESS MESSAGE -->
+    @if (TempData["SuccessMessage"] != null)
+    {
+        <div class="alert alert-success alert-dismissible fade show bonus-alert mb-4" role="alert">
+            <i class="fa-solid fa-circle-check me-2"></i>
+            @TempData["SuccessMessage"]
+
+            <button type="button"
+                    class="btn-close"
+                    data-bs-dismiss="alert"
+                    aria-label="Close"></button>
+        </div>
+    }
+
+    <!-- ERROR MESSAGE -->
+    @if (TempData["ErrorMessage"] != null)
+    {
+        <div class="alert alert-danger alert-dismissible fade show bonus-alert mb-4" role="alert">
+            <i class="fa-solid fa-circle-exclamation me-2"></i>
+            @TempData["ErrorMessage"]
+
+            <button type="button"
+                    class="btn-close"
+                    data-bs-dismiss="alert"
+                    aria-label="Close"></button>
+        </div>
+    }
+
+
+    <!-- =====================================================
+         HERO HEADER
+    ====================================================== -->
+
+    <div class="bonus-hero">
+        <div class="bonus-hero-content">
+
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
+
+                <div class="d-flex align-items-start gap-3">
+
+                    <div class="bonus-hero-icon">
+                        <i class="fa-solid fa-gift"></i>
+                    </div>
+
+                    <div>
+                        <h4 class="bonus-title">
+                            Bonus & Incentive Management
+                        </h4>
+
+                        <p class="bonus-subtitle">
+                            Track employee rewards, bonuses, performance incentives and payout approvals.
+                        </p>
+
+                        <nav aria-label="breadcrumb">
+                            <ol class="breadcrumb bonus-breadcrumb">
+                                <li class="breadcrumb-item">
+                                    <a href="/HR">
+                                        HR Dashboard
+                                    </a>
+                                </li>
+
+                                <li class="breadcrumb-item active">
+                                    Bonus & Incentives
+                                </li>
+                            </ol>
+                        </nav>
+                    </div>
+
+                </div>
+
+                <div class="bonus-hero-actions">
+                    <button class="btn bonus-add-btn"
+                            data-bs-toggle="modal"
+                            data-bs-target="#awardBonusModal">
+                        <i class="fa-solid fa-plus me-2"></i>
+                        Award Incentive / Bonus
+                    </button>
+                </div>
+
+            </div>
+
+        </div>
+    </div>
+
+
+    <!-- =====================================================
+         STATISTICS
+    ====================================================== -->
+
+    <div class="row g-3 mb-4">
+
+        <!-- TOTAL RECORDS -->
+
+        <div class="col-md-4">
+            <div class="bonus-stat-card stat-card-primary">
+
+                <div class="d-flex align-items-center justify-content-between">
+
+                    <div>
+                        <div class="stat-label">
+                            Total Bonus Records
+                        </div>
+
+                        <h3 class="stat-number">
+                            @totalRecords
+                        </h3>
+
+                        <div class="text-muted extra-small mt-2">
+                            Employee reward entries
+                        </div>
+                    </div>
+
+                    <div class="stat-icon stat-icon-primary">
+                        <i class="fa-solid fa-trophy"></i>
+                    </div>
+
+                </div>
+
+            </div>
+        </div>
+
+
+        <!-- APPROVED PAYOUT -->
+
+        <div class="col-md-4">
+            <div class="bonus-stat-card stat-card-success">
+
+                <div class="d-flex align-items-center justify-content-between">
+
+                    <div>
+                        <div class="stat-label">
+                            Approved for Payout
+                        </div>
+
+                        <h3 class="stat-number text-success">
+                            ₹@approvedTotal.ToString("N0")
+                        </h3>
+
+                        <div class="text-muted extra-small mt-2">
+                            Approved reward value
+                        </div>
+                    </div>
+
+                    <div class="stat-icon stat-icon-success">
+                        <i class="fa-solid fa-circle-check"></i>
+                    </div>
+
+                </div>
+
+            </div>
+        </div>
+
+
+        <!-- PENDING -->
+
+        <div class="col-md-4">
+            <div class="bonus-stat-card stat-card-warning">
+
+                <div class="d-flex align-items-center justify-content-between">
+
+                    <div>
+                        <div class="stat-label">
+                            Pending Approvals
+                        </div>
+
+                        <h3 class="stat-number text-warning">
+                            @pendingCount
+                        </h3>
+
+                        <div class="text-muted extra-small mt-2">
+                            Awaiting HR approval
+                        </div>
+                    </div>
+
+                    <div class="stat-icon stat-icon-warning">
+                        <i class="fa-solid fa-hourglass-half"></i>
+                    </div>
+
+                </div>
+
+            </div>
+        </div>
+
+    </div>
+
+
+    <!-- =====================================================
+         BONUS & INCENTIVE TRACKER & FILTER BAR
+    ====================================================== -->
+
+    <div class="bonus-table-card">
+
+        <!-- TABLE HEADER & FILTERS -->
+        <div class="bonus-table-header">
+            <div class="row align-items-center g-3">
+                <div class="col-lg-5">
+                    <h6 class="bonus-section-title">
+                        <i class="fa-solid fa-list-check text-primary me-2"></i>
+                        Bonus & Incentive Tracker
+                    </h6>
+                    <p class="bonus-section-subtitle">
+                        Review, approve and manage employee bonus and incentive records linked to payroll.
+                    </p>
+                </div>
+
+                <div class="col-lg-7">
+                    <form method="get" asp-action="BonusIncentives" class="d-flex flex-wrap align-items-center justify-content-lg-end gap-2">
+                        <div class="input-group input-group-sm" style="max-width: 250px;">
+                            <span class="input-group-text bg-light border-end-0"><i class="fa fa-search text-muted"></i></span>
+                            <input type="text" name="search" class="form-control border-start-0" placeholder="Search staff, code, type..." value="@ViewBag.SearchTerm" />
+                        </div>
+
+                        <select name="status" class="form-select form-select-sm" style="max-width: 170px;" onchange="this.form.submit()">
+                            <option value="All" selected="@(ViewBag.SelectedStatus == "All" || string.IsNullOrEmpty(ViewBag.SelectedStatus))">All Statuses</option>
+                            <option value="Approved" selected="@(ViewBag.SelectedStatus == "Approved")">Approved</option>
+                            <option value="Pending" selected="@(ViewBag.SelectedStatus == "Pending" || ViewBag.SelectedStatus == "Draft")">Pending / Draft</option>
+                            <option value="Paid in Payroll" selected="@(ViewBag.SelectedStatus == "Paid in Payroll" || ViewBag.SelectedStatus == "Paid")">Paid in Payroll</option>
+                        </select>
+
+                        <button type="submit" class="btn btn-sm btn-outline-primary fw-bold">
+                            <i class="fa-solid fa-filter me-1"></i> Filter
+                        </button>
+
+                        @if (!string.IsNullOrEmpty(ViewBag.SearchTerm) || (ViewBag.SelectedStatus != null && ViewBag.SelectedStatus != "All"))
+                        {
+                            <a href="/HRPayroll/BonusIncentives" class="btn btn-sm btn-outline-secondary" title="Clear Filters">
+                                <i class="fa-solid fa-xmark"></i>
+                            </a>
+                        }
+
+                        <div class="bonus-record-badge ms-lg-2">
+                            <i class="fa-solid fa-database me-1"></i>
+                            @totalRecords Records
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- TABLE -->
+        <div class="table-responsive">
+            <table class="table bonus-table table-hover align-middle">
+                <thead>
+                    <tr>
+                        <th>Employee</th>
+                        <th>Incentive Type</th>
+                        <th>Amount</th>
+                        <th>Performance Period</th>
+                        <th>Payout Month</th>
+                        <th>Reason / Description</th>
+                        <th>Status</th>
+                        <th class="text-end">Actions</th>
+                    </tr>
+                </thead>
+
+                <tbody>
+                    @if (Model == null || !Model.Any())
+                    {
+                        <tr>
+                            <td colspan="8" class="text-center bonus-empty py-5">
+                                <div class="bonus-empty-icon">
+                                    <i class="fa-solid fa-gift"></i>
+                                </div>
+                                <div class="fw-bold text-dark mb-1">
+                                    No Bonus or Incentive Records Found
+                                </div>
+                                <div class="text-muted small">
+                                    Award a new incentive or adjust filter criteria to view records.
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                    else
+                    {
+                        @foreach (var item in Model)
+                        {
+                            <tr>
+                                <!-- EMPLOYEE -->
+                                <td>
+                                    <div class="bonus-employee">
+                                        <div class="bonus-avatar">
+                                            @(item.User?.FullName?.Length >= 2 ? item.User.FullName.Substring(0, 2).ToUpper() : "ST")
+                                        </div>
+                                        <div>
+                                            <div class="bonus-employee-name">
+                                                @(item.User?.FullName ?? "N/A")
+                                            </div>
+                                            <div class="bonus-employee-code">
+                                                @(item.User?.UserCode ?? item.User?.UserName ?? "EMP") &bull; @(item.User?.Department != null ? item.User.Department.DepartmentName : "General")
+                                            </div>
+                                        </div>
+                                    </div>
+                                </td>
+
+                                <!-- TYPE -->
+                                <td>
+                                    <span class="bonus-type-badge">
+                                        <i class="fa-solid fa-star me-1 text-warning"></i>
+                                        @item.Type
+                                    </span>
+                                </td>
+
+                                <!-- AMOUNT -->
+                                <td>
+                                    <span class="bonus-amount text-success fw-bold">
+                                        ₹@item.Amount.ToString("N0")
+                                    </span>
+                                </td>
+
+                                <!-- PERFORMANCE PERIOD -->
+                                <td class="text-dark fw-semibold">
+                                    @item.PerformancePeriod
+                                </td>
+
+                                <!-- PAYOUT MONTH -->
+                                <td>
+                                    <span class="bonus-period-badge">
+                                        <i class="fa-solid fa-calendar me-1 text-primary"></i>
+                                        @item.PayoutMonth
+                                    </span>
+                                </td>
+
+                                <!-- REASON -->
+                                <td>
+                                    <div class="bonus-reason text-muted small" style="max-width: 250px;">
+                                        @(item.Reason ?? "No description provided")
+                                    </div>
+                                </td>
+
+                                <!-- STATUS -->
+                                <td>
+                                    @if (item.Status == "Paid" || item.Status == "Paid in Payroll" || item.Status == "Included in Payroll")
+                                    {
+                                        <span class="bonus-status status-paid">
+                                            <i class="fa-solid fa-circle-check"></i>
+                                            @(item.Status == "Paid" ? "Paid in Payroll" : item.Status)
+                                        </span>
+                                    }
+                                    else if (item.Status == "Approved")
+                                    {
+                                        <span class="bonus-status status-approved">
+                                            <i class="fa-solid fa-thumbs-up"></i>
+                                            Approved
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        <span class="bonus-status status-pending">
+                                            <i class="fa-solid fa-clock"></i>
+                                            @(string.IsNullOrEmpty(item.Status) ? "Draft" : item.Status)
+                                        </span>
+                                    }
+                                </td>
+
+                                <!-- ACTIONS -->
+                                <td class="text-end">
+                                    <div class="d-flex justify-content-end align-items-center gap-2">
+                                        @if (item.Status == "Draft" || item.Status == "Submitted" || item.Status == "Pending")
+                                        {
+                                            <form asp-action="ApproveBonusIncentive" method="post" class="d-inline">
+                                                @Html.AntiForgeryToken()
+                                                <input type="hidden" name="id" value="@item.BonusId" />
+                                                <button type="submit" class="btn btn-sm btn-outline-success bonus-approve-btn" title="Approve for Payroll">
+                                                    <i class="fa-solid fa-check me-1"></i> Approve
+                                                </button>
+                                            </form>
+                                        }
+
+                                        @if (item.Status != "Included in Payroll" && item.Status != "Paid" && item.Status != "Paid in Payroll")
+                                        {
+                                            <form asp-action="DeleteBonus" method="post" class="d-inline" onsubmit="return confirm('Are you sure you want to delete this bonus record?');">
+                                                @Html.AntiForgeryToken()
+                                                <input type="hidden" name="id" value="@item.BonusId" />
+                                                <button type="submit" class="btn btn-sm btn-outline-danger bonus-delete-btn" title="Delete Bonus Record">
+                                                    <i class="fa-solid fa-trash"></i>
+                                                </button>
+                                            </form>
+                                        }
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+
+<!-- =========================================================
+     AWARD BONUS OR INCENTIVE MODAL WITH 2000+ AJAX LIVE-SEARCH
+========================================================== -->
+<div class="modal fade" id="awardBonusModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <form asp-action="AwardBonus" asp-controller="HRPayroll" method="post">
+                @Html.AntiForgeryToken()
+                <div class="modal-header border-0 pb-0">
+                    <h5 class="modal-title fw-bold"><i class="fa fa-gift text-primary me-2"></i>Award Bonus or Incentive</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body text-start">
+                    <div class="alert alert-light border small text-muted mb-3">
+                        <i class="fa fa-info-circle text-primary me-1"></i> Approved incentives will be automatically included in the employee's payout during the selected monthly payroll run.
+                    </div>
+
+                    <!-- 2000+ Staff Debounced Search Picker -->
+                    <div class="mb-3 position-relative">
+                        <label class="form-label small fw-semibold">Select Employee <span class="text-danger">*</span></label>
+                        <div class="input-group">
+                            <span class="input-group-text bg-white"><i class="fa fa-search text-muted"></i></span>
+                            <input type="text" id="bonusStaffSearchInput" class="form-control" 
+                                   placeholder="Type employee name, code, or email..." 
+                                   autocomplete="off" oninput="triggerBonusStaffSearch(this.value)" required />
+                        </div>
+                        <input type="hidden" name="userId" id="bonusSelectedUserId" required />
+                        <div id="bonusStaffSearchResults" class="list-group position-absolute w-100 shadow-lg d-none mt-1" 
+                             style="z-index: 1070; max-height: 200px; overflow-y: auto;"></div>
+                    </div>
+
+                    <div class="row g-2 mb-3">
+                        <div class="col-6">
+                            <label class="form-label small fw-semibold">Incentive Type <span class="text-danger">*</span></label>
+                            <select name="incentiveType" class="form-select form-select-sm" required>
+                                <option value="Sales Incentive / Commission">Sales Incentive / Commission</option>
+                                <option value="Performance Bonus" selected>Performance Bonus</option>
+                                <option value="Festival / Annual Bonus">Festival / Annual Bonus</option>
+                                <option value="Spot Award / Recognition">Spot Award / Recognition</option>
+                                <option value="Retention Bonus">Retention Bonus</option>
+                                <option value="Project Incentive">Project Incentive</option>
+                            </select>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small fw-semibold">Award Amount (₹) <span class="text-danger">*</span></label>
+                            <input type="number" step="100" min="100" name="amount" class="form-control form-control-sm" placeholder="e.g. 15000" required />
+                        </div>
+                    </div>
+
+                    <div class="row g-2 mb-3">
+                        <div class="col-6">
+                            <label class="form-label small fw-semibold">Performance Period <span class="text-danger">*</span></label>
+                            <select name="performancePeriod" class="form-select form-select-sm" required>
+                                <option value="August 2026">August 2026</option>
+                                <option value="September 2026" selected>September 2026</option>
+                                <option value="October 2026">October 2026</option>
+                                <option value="Q2 2026 (Jul-Sep)">Q2 2026 (Jul-Sep)</option>
+                                <option value="Q3 2026 (Oct-Dec)">Q3 2026 (Oct-Dec)</option>
+                                <option value="Annual FY 2026-27">Annual FY 2026-27</option>
+                            </select>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small fw-semibold">Payout Month <span class="text-danger">*</span></label>
+                            <select name="payoutMonth" class="form-select form-select-sm" required>
+                                <option value="August 2026">August 2026</option>
+                                <option value="September 2026" selected>September 2026</option>
+                                <option value="October 2026">October 2026</option>
+                                <option value="November 2026">November 2026</option>
+                                <option value="December 2026">December 2026</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="mb-2">
+                        <label class="form-label small fw-semibold">Reason / Description</label>
+                        <input type="text" name="reasonOrDescription" class="form-control form-control-sm" placeholder="e.g. Top performer in Sales Drive" />
+                    </div>
+                </div>
+                <div class="modal-footer border-0">
+                    <button type="button" class="btn btn-light btn-sm" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary btn-sm px-4 fw-bold">
+                        <i class="fa-solid fa-award me-1"></i> Award Bonus
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+    let bonusSearchTimer;
+    function triggerBonusStaffSearch(query) {
+        clearTimeout(bonusSearchTimer);
+        const results = document.getElementById('bonusStaffSearchResults');
+        if (!query || query.trim().length < 2) {
+            results.classList.add('d-none');
+            return;
+        }
+
+        bonusSearchTimer = setTimeout(() => {
+            fetch(`/HRPayroll/SearchEmployees?q=${encodeURIComponent(query.trim())}`)
+                .then(r => r.json())
+                .then(data => {
+                    results.innerHTML = '';
+                    if (!data || data.length === 0) {
+                        results.innerHTML = '<div class="list-group-item text-muted small">No employee found</div>';
+                    } else {
+                        data.forEach(item => {
+                            const btn = document.createElement('button');
+                            btn.type = 'button';
+                            btn.className = 'list-group-item list-group-item-action text-start small py-2';
+                            const label = item.text || `${item.name} (${item.code || 'EMP'}) - ${item.department || ''}`;
+                            btn.innerHTML = `<i class="fa fa-user text-primary me-2"></i> ${label}`;
+                            btn.onclick = () => {
+                                document.getElementById('bonusStaffSearchInput').value = `${item.name || item.text} (${item.code || ''})`;
+                                document.getElementById('bonusSelectedUserId').value = item.id;
+                                results.classList.add('d-none');
+                            };
+                            results.appendChild(btn);
+                        });
+                    }
+                    results.classList.remove('d-none');
+                })
+                .catch(err => {
+                    console.error("Staff search error:", err);
+                });
+        }, 300);
+    }
+
+    // Hide search results dropdown on outside click
+    document.addEventListener('click', function(e) {
+        const results = document.getElementById('bonusStaffSearchResults');
+        const input = document.getElementById('bonusStaffSearchInput');
+        if (results && !results.contains(e.target) && e.target !== input) {
+            results.classList.add('d-none');
+        }
+    });
+</script>

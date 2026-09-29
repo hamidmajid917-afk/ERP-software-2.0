@@ -1,0 +1,2775 @@
+@using System.Security.Claims
+@using Microsoft.EntityFrameworkCore
+@inject ERP_System.Data.ApplicationDbContext _switcherContext
+
+@{
+    var userFullName = User.Identity?.Name ?? "User Account";
+    var userRole = User.FindFirst(ClaimTypes.Role)?.Value ?? "Employee";
+
+    var userCompanyIdStr = User.FindFirst("Company")?.Value;
+    var userCompany = "ERP Solutions Ltd";
+    if (int.TryParse(userCompanyIdStr, out int loggedCompanyId))
+    {
+        userCompany = _switcherContext.Companies.Where(c => c.CompanyId == loggedCompanyId).Select(c => c.CompanyName).FirstOrDefault() ?? "ERP Solutions Ltd";
+    }
+
+    var currentUserIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+    var allowedModules = new List<string>();
+    if (User.Identity?.IsAuthenticated == true)
+    {
+        var roleModules = _switcherContext.RolePermissions
+            .Include(p => p.Role)
+            .Where(p => p.Role != null && p.Role.RoleName == userRole && (p.IsAllowed || p.CanView))
+            .Select(p => p.ModuleName)
+            .ToList();
+
+        var userSpecificModules = new List<string>();
+        if (int.TryParse(currentUserIdClaim, out int loggedUid))
+        {
+            userSpecificModules = _switcherContext.UserPermissions
+                .Where(up => up.UserId == loggedUid && (up.IsAllowed || up.CanView))
+                .Select(up => up.ModuleName)
+                .ToList();
+        }
+
+        allowedModules = roleModules.Union(userSpecificModules).Distinct().ToList();
+    }
+
+    bool isMasterAdmin = userRole == "Super Admin" || userRole == "Admin";
+
+    bool showUserMgmt = isMasterAdmin || allowedModules.Contains("UserManagement");
+    bool showCompany = isMasterAdmin || allowedModules.Contains("Company");
+    bool showBranchMgmt = isMasterAdmin || allowedModules.Contains("BranchManagement");
+    bool showEmployeeMgmt = isMasterAdmin || allowedModules.Contains("EmployeeManagement") || allowedModules.Contains("HRManagement_EmployeeDirectory");
+    bool showCustomerMgmt = isMasterAdmin || allowedModules.Contains("CustomerManagement") || allowedModules.Contains("SalesCRM_CustomerDirectory");
+    bool showSupplierMgmt = isMasterAdmin || allowedModules.Contains("SupplierManagement") || allowedModules.Contains("SupplyChain_PurchaseOrders");
+    bool showProductMgmt = isMasterAdmin || allowedModules.Contains("ProductManagement") || allowedModules.Contains("SupplyChain_InventoryStock");
+    bool showInventoryMgmt = isMasterAdmin || allowedModules.Contains("InventoryManagement") || allowedModules.Contains("SupplyChain_InventoryStock") || allowedModules.Contains("SupplyChain_GoodsReceipt");
+    bool showPurchaseMgmt = isMasterAdmin || allowedModules.Contains("PurchaseManagement") || allowedModules.Contains("SupplyChain_PurchaseOrders");
+    bool showSalesMgmt = isMasterAdmin || allowedModules.Contains("SalesManagement") || allowedModules.Contains("SalesCRM_OrdersInvoicing") || allowedModules.Contains("SalesCRM_QuotationsEstimates");
+    bool showExpenseMgmt = isMasterAdmin || allowedModules.Contains("ExpenseManagement") || allowedModules.Contains("FinanceAccounts_GeneralLedger");
+    bool showAccounting = isMasterAdmin || allowedModules.Contains("Accounting") || allowedModules.Contains("FinanceAccounts_GeneralLedger");
+    bool showHRMgmt = isMasterAdmin || allowedModules.Contains("HRManagement") || allowedModules.Contains("HRManagement_DailyAttendance") || allowedModules.Contains("HRManagement_LeaveRequests") || allowedModules.Contains("HRManagement_MonthlyPayroll") || allowedModules.Contains("HRManagement_EmployeeDirectory");
+    bool showReports = isMasterAdmin || allowedModules.Contains("Reports") || allowedModules.Contains("FinanceAccounts_ReportsTax");
+    bool showSettings = isMasterAdmin || allowedModules.Contains("Settings");
+
+    var currentController = ViewContext.RouteData.Values["controller"]?.ToString() ?? "Dashboard";
+    var currentAction = ViewContext.RouteData.Values["action"]?.ToString() ?? "Index";
+
+    string? userProfilePhoto = null;
+    if (int.TryParse(currentUserIdClaim, out int loggedUserId))
+    {
+        userProfilePhoto = _switcherContext.Users.Where(u => u.UserId == loggedUserId).Select(u => u.ProfilePhoto).FirstOrDefault();
+    }
+    var layoutProfilePhoto = !string.IsNullOrEmpty(userProfilePhoto) ? userProfilePhoto : "/profile_images/admin-avatar.jpg";
+
+    // Read per-user preferences from Cookies for dynamic website styling & persistence
+    var userThemeMode = Context.Request.Cookies["UserSettings_ThemeMode"] ?? "Light";
+    var userPrimaryAccent = Context.Request.Cookies["UserSettings_PrimaryAccentColor"] ?? "#3b82f6";
+    var userSidebarLayout = Context.Request.Cookies["UserSettings_SidebarLayout"] ?? "Expanded";
+    var userSystemName = Context.Request.Cookies["UserSettings_SystemName"] ?? "ERP System Solutions";
+    var isDarkMode = userThemeMode.Equals("Dark", StringComparison.OrdinalIgnoreCase);
+    var isCompactSidebar = userSidebarLayout.Equals("Compact", StringComparison.OrdinalIgnoreCase);
+
+    var sidebarBg = isDarkMode ? "#0f172a" : "#0e1726";
+    var topbarBg = isDarkMode ? "#1e293b" : "#ffffff";
+    var contentBg = isDarkMode ? "#0f172a" : "#f8fafc";
+    var textColor = isDarkMode ? "#f8fafc" : "#1e293b";
+    var borderWarm = isDarkMode ? "#334155" : "#e2e8f0";
+    var cardBg = isDarkMode ? "#1e293b" : "#ffffff";
+}
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="~/lib/fontawesome-free/css/all.min.css" />
+
+    <!-- 1. jQuery Core FIRST -->
+    <script src="https://code.jquery.com/jquery-3.6.4.min.js"></script>
+
+    <!-- 2. Bootstrap Bundle NEXT -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+    <!-- 3. Toastr CSS & JS AFTER jQuery -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.css" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.js"></script>
+
+    <!-- 4. SweetAlert2 -->
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+    <!-- 5. ASP.NET Core SignalR Client -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.7/signalr.min.js"></script>
+    <style>
+        @@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
+
+        :root {
+            --sidebar-bg: @sidebarBg;
+            --sidebar-color: #abb5c2;
+            --sidebar-active-bg: @userPrimaryAccent;
+            --sidebar-active-color: #ffffff;
+            --topbar-bg: @topbarBg;
+            --content-bg: @contentBg;
+            --text-color: @textColor;
+            --border-warm: @borderWarm;
+            --primary-warm: @userPrimaryAccent;
+            --panel-card-bg: @cardBg;
+        }
+
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background-color: var(--content-bg);
+            color: var(--text-color);
+            margin: 0;
+            padding: 0;
+            overflow-x: hidden;
+        }
+
+        @if (isDarkMode)
+        {
+            <text>
+            /* Dark Slate Mode Global Contrast Overrides */
+            .panel-card, .card, .modal-content, .dropdown-menu, .table, .form-control-warm, .form-control, .form-select, select, input, textarea {
+                background-color: #1e293b !important;
+                color: #f8fafc !important;
+                border-color: #334155 !important;
+            }
+
+            /* Dropdown Select Option Contrast: explicit contrast styling for select options in Dark Mode */
+            select option, .form-select option, option {
+                background-color: #1e293b !important;
+                color: #ffffff !important;
+            }
+
+            .form-control-warm:focus, .form-select:focus, .form-control:focus, select:focus {
+                background-color: #1e293b !important;
+                color: #ffffff !important;
+                border-color: var(--primary-warm) !important;
+                box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.25) !important;
+            }
+
+            .text-dark, .h1, .h2, .h3, .h4, .h5, .h6, h1, h2, h3, h4, h5, h6, label, .form-label, .fw-bold {
+                color: #f8fafc !important;
+            }
+
+            .bg-light, .bg-light-subtle {
+                background-color: #0f172a !important;
+                color: #f8fafc !important;
+            }
+
+            .text-muted, .form-text, .extra-small {
+                color: #94a3b8 !important;
+            }
+
+            .breadcrumb-item.active, .breadcrumb-item a {
+                color: #94a3b8 !important;
+            }
+
+            .dropdown-item {
+                color: #f8fafc !important;
+            }
+
+            .dropdown-item:hover, .dropdown-item:focus {
+                background-color: rgba(255, 255, 255, 0.1) !important;
+                color: #ffffff !important;
+            }
+
+            .settings-nav .nav-link {
+                color: #cbd5e1 !important;
+                background-color: rgba(255, 255, 255, 0.04) !important;
+                border-color: #334155 !important;
+            }
+
+            .settings-nav .nav-link:hover {
+                background-color: rgba(255, 255, 255, 0.12) !important;
+                color: #ffffff !important;
+            }
+
+            .settings-nav .nav-link.active {
+                background-color: var(--primary-warm) !important;
+                color: #ffffff !important;
+                border-color: var(--primary-warm) !important;
+            }
+
+            .settings-icon {
+                background-color: rgba(255, 255, 255, 0.1) !important;
+                color: #f8fafc !important;
+            }
+
+            .settings-nav .nav-link.active .settings-icon {
+                background-color: rgba(255, 255, 255, 0.25) !important;
+                color: #ffffff !important;
+            }
+            </text>
+        }
+        else
+        {
+            <text>
+            /* Light Mode Dropdown Select Option Contrast */
+            select option, .form-select option, option {
+                background-color: #ffffff !important;
+                color: #0f172a !important;
+            }
+            </text>
+        }
+
+        @if (isCompactSidebar)
+        {
+            <text>
+            #sidebar {
+                min-width: 80px !important;
+                max-width: 80px !important;
+            }
+            #sidebar .menu-title, #sidebar .sidebar-brand span, #sidebar .menu-link span, #sidebar .dropdown-toggle-arrow, #sidebar .sidebar-footer span:last-child {
+                display: none !important;
+            }
+            #sidebar .menu-link {
+                justify-content: center !important;
+                padding: 0.75rem 0 !important;
+            }
+            #sidebar .menu-icon {
+                margin-right: 0 !important;
+                font-size: 1.25rem !important;
+            }
+            </text>
+        }
+
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background-color: var(--content-bg);
+            color: var(--text-color);
+            margin: 0;
+            padding: 0;
+            overflow-x: hidden;
+        }
+
+        /* Layout Structure */
+        .wrapper {
+            display: flex;
+            align-items: stretch;
+            min-height: 100vh;
+        }
+
+        /* Left Sidebar styling (Original Dark Navy) */
+        #sidebar {
+            min-width: 280px;
+            max-width: 280px;
+            background-color: var(--sidebar-bg);
+            color: var(--sidebar-color);
+            transition: all 0.3s;
+            display: flex;
+            flex-direction: column;
+            border-right: 1px solid rgba(255, 255, 255, 0.05);
+            /* Sidebar now scrolls independently of the page */
+            position: sticky;
+            top: 0;
+            height: 100vh;
+            align-self: flex-start;
+        }
+
+            #sidebar.active {
+                margin-left: -280px;
+            }
+
+        .sidebar-header {
+            padding: 1.5rem 1.25rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-shrink: 0;
+        }
+
+        .sidebar-brand {
+            font-weight: 800;
+            font-size: 1.25rem;
+            color: #ffffff;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .sidebar-menu {
+            flex-grow: 1;
+            padding: 1rem 0;
+            overflow-y: auto;
+            /* Slim scrollbar (Firefox) */
+            scrollbar-width: thin;
+            scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+        }
+
+            /* Slim scrollbar (WebKit/Chromium/Edge) */
+            .sidebar-menu::-webkit-scrollbar {
+                width: 6px;
+            }
+
+            .sidebar-menu::-webkit-scrollbar-track {
+                background: transparent;
+            }
+
+            .sidebar-menu::-webkit-scrollbar-thumb {
+                background-color: rgba(255, 255, 255, 0.18);
+                border-radius: 6px;
+            }
+
+                .sidebar-menu::-webkit-scrollbar-thumb:hover {
+                    background-color: rgba(255, 255, 255, 0.32);
+                }
+
+        .menu-title {
+            padding: 0.75rem 1.25rem 0.25rem 1.25rem;
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            font-weight: 700;
+            letter-spacing: 0.8px;
+            color: #64748b;
+        }
+
+        .menu-link {
+            padding: 0.65rem 1rem;
+            margin: 2px 12px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            color: var(--sidebar-color);
+            text-decoration: none;
+            font-size: 0.9rem;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+
+            .menu-link:hover {
+                background-color: rgba(255, 255, 255, 0.05);
+                color: #ffffff;
+            }
+
+            .menu-link.active {
+                background-color: var(--sidebar-active-bg);
+                color: var(--sidebar-active-color);
+                font-weight: 600;
+            }
+
+            .menu-link > div {
+                display: flex;
+                align-items: center;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
+
+        .menu-icon {
+            margin-right: 12px;
+            width: 18px;
+            text-align: center;
+            font-size: 0.95rem;
+        }
+
+        .sidebar-heading {
+            letter-spacing: 0.8px;
+            font-weight: 700;
+        }
+
+        #sidebar .nav-link {
+            color: var(--sidebar-color);
+            padding: 0.65rem 1rem;
+            margin: 2px 12px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            font-size: 0.9rem;
+            font-weight: 500;
+            transition: all 0.2s;
+            text-decoration: none;
+        }
+
+        #sidebar .nav-link:hover {
+            background-color: rgba(255, 255, 255, 0.05);
+            color: #ffffff;
+        }
+
+        #sidebar .nav-link.active {
+            background-color: var(--sidebar-active-bg);
+            color: var(--sidebar-active-color);
+            font-weight: 600;
+        }
+
+        /* Sidebar Quick Links */
+        .sidebar-quicklinks {
+            margin: 12px;
+            padding: 1rem;
+            border-radius: 8px;
+            background-color: #141d31;
+            border: 1px solid rgba(255, 255, 255, 0.02);
+        }
+
+        /* Main Content Container */
+        #content {
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+        }
+
+        /* Top Header Navigation Bar */
+        .topbar {
+            background-color: var(--topbar-bg);
+            border-bottom: 1px solid var(--border-warm);
+            padding: 0.75rem 1.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            height: 60px;
+        }
+
+        .toggle-btn {
+            background: none;
+            border: none;
+            font-size: 1.2rem;
+            color: var(--text-color);
+            cursor: pointer;
+        }
+
+        .search-box {
+            position: relative;
+            max-width: 300px;
+            width: 100%;
+        }
+
+            .search-box input {
+                padding: 0.4rem 1rem 0.4rem 2.2rem;
+                border-radius: 6px;
+                border: 1px solid #cbd5e1;
+                font-size: 0.85rem;
+                background-color: #f8fafc;
+                color: var(--text-color);
+                width: 100%;
+                transition: border-color 0.2s;
+            }
+
+                .search-box input:focus {
+                    outline: none;
+                    border-color: var(--primary-warm);
+                }
+
+            .search-box i {
+                position: absolute;
+                left: 0.8rem;
+                top: 50%;
+                transform: translateY(-50%);
+                color: #94a3b8;
+                font-size: 0.85rem;
+            }
+
+        .topbar-right {
+            display: flex;
+            align-items: center;
+            gap: 1.25rem;
+        }
+
+        .icon-btn {
+            background: none;
+            border: none;
+            position: relative;
+            color: #475569;
+            cursor: pointer;
+            font-size: 1.1rem;
+            padding: 0.25rem;
+            transition: color 0.2s;
+        }
+
+            .icon-btn:hover {
+                color: var(--text-color);
+            }
+
+        .icon-badge {
+            position: absolute;
+            top: -2px;
+            right: -2px;
+            font-size: 0.6rem;
+            padding: 0.2rem 0.35rem;
+            border-radius: 50%;
+        }
+
+        .user-profile {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            cursor: pointer;
+            text-decoration: none;
+            color: inherit;
+        }
+
+        .profile-img {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background-color: #e2e8f0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            color: var(--primary-warm);
+            font-size: 0.85rem;
+            border: 2px solid var(--primary-warm);
+        }
+
+        .profile-info {
+            line-height: 1.1;
+        }
+
+        .profile-name {
+            font-weight: 600;
+            font-size: 0.85rem;
+            color: var(--text-color);
+        }
+
+        .profile-role {
+            font-size: 0.7rem;
+            color: #64748b;
+        }
+
+        .main-inner {
+            padding: 1.5rem;
+            flex-grow: 1;
+            overflow-y: auto;
+        }
+
+        /* Sidebar Footer copyright */
+        .sidebar-footer {
+            padding: 0.75rem 1.25rem;
+            font-size: 0.7rem;
+            color: #64748b;
+            border-top: 1px solid rgba(255, 255, 255, 0.05);
+            display: flex;
+            justify-content: space-between;
+            flex-shrink: 0;
+        }
+
+        /* Suppress Google Translate Top Banner & Iframe */
+        .goog-te-banner-frame, .goog-te-banner-frame.skiptranslate, iframe.skiptranslate, iframe[class*="VIpgJd"], iframe[id*="goog-gt"], .VIpgJd-ZGain-xl0qp4-Ojan2-OWX0fe, #goog-gt-tt, .goog-te-balloon-frame {
+            display: none !important;
+            visibility: hidden !important;
+            opacity: 0 !important;
+            height: 0 !important;
+            pointer-events: none !important;
+        }
+
+        body {
+            top: 0px !important;
+            position: static !important;
+            margin-top: 0px !important;
+        }
+
+        #google_translate_element, .goog-te-spinner-pos, .goog-te-combo {
+            display: none !important;
+        }
+
+        /* Collapsible sub-menus for nested layout */
+        .sidebar-submenu {
+            background-color: rgba(0, 0, 0, 0.15);
+            border-left: 2px solid rgba(255, 255, 255, 0.08);
+            margin: 2px 12px 2px 24px;
+            padding-left: 8px;
+            border-radius: 4px;
+        }
+
+        .submenu-link {
+            padding: 0.45rem 1rem;
+            color: var(--sidebar-color);
+            text-decoration: none;
+            font-size: 0.8rem;
+            font-weight: 500;
+            display: block;
+            border-radius: 6px;
+            transition: all 0.2s;
+        }
+
+            .submenu-link:hover {
+                background-color: rgba(255, 255, 255, 0.05);
+                color: #ffffff;
+            }
+
+            .submenu-link.active {
+                color: #ffffff;
+                background-color: rgba(255, 255, 255, 0.08);
+                font-weight: 600;
+            }
+
+        .dropdown-toggle-arrow {
+            transition: transform 0.2s;
+        }
+
+        .menu-link[aria-expanded="true"] .dropdown-toggle-arrow {
+            transform: rotate(90deg);
+        }
+        .hover-waffle-item {
+            transition: all 0.2s ease;
+        }
+        .hover-waffle-item:hover {
+            background-color: #f1f5f9;
+            transform: scale(1.05);
+        }
+    </style>
+</head>
+<body>
+    <div class="wrapper">
+        <!-- Left Sidebar Navigation -->
+        <nav id="sidebar">
+            <div class="sidebar-header">
+                <a href="/" class="sidebar-brand">
+                    <i class="fa-solid fa-cubes text-white"></i>
+                    <span>@userSystemName</span>
+                </a>
+                <button class="toggle-btn text-white d-lg-none" onclick="toggleSidebar()"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+
+            <div class="sidebar-menu">
+                @if (userRole == "Sales Manager" || userRole == "Sales Executive")
+                {
+                    var isExecutive = userRole == "Sales Executive";
+                    var salesDashUrl = isExecutive ? "/SalesDashboard" : "/SalesManagerDashboard";
+                    var isSalesDashActive = currentController == "SalesDashboard" || currentController == "SalesManagerDashboard";
+
+                    <div class="menu-title font-bold text-uppercase" style="font-size: 0.7rem; color: rgba(255,255,255,0.45); padding: 0.75rem 1rem 0.25rem; letter-spacing: 0.5px;">Main</div>
+                    <a href="@salesDashUrl" class="menu-link @(isSalesDashActive ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-gauge menu-icon"></i>
+                            <span>Sales Dashboard</span>
+                        </div>
+                    </a>
+
+                    <div class="menu-title font-bold text-uppercase" style="font-size: 0.7rem; color: rgba(255,255,255,0.45); padding: 0.75rem 1rem 0.25rem; letter-spacing: 0.5px;">Core Operations</div>
+                    <a href="/Customers" class="menu-link @(currentController == "Customers" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-handshake menu-icon"></i>
+                            <span>Customer Management</span>
+                        </div>
+                    </a>
+
+                    <a href="/Products" class="menu-link @(currentController == "Products" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-box-open menu-icon"></i>
+                            <span>Product Management</span>
+                        </div>
+                    </a>
+
+                    <a href="/SalesManagement/Leads" class="menu-link @(currentController == "SalesManagement" && currentAction == "Leads" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-filter menu-icon"></i>
+                            <span>Leads</span>
+                        </div>
+                    </a>
+
+                    <a href="/SalesManagement/Quotations" class="menu-link @(currentController == "SalesManagement" && currentAction == "Quotations" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-file-signature menu-icon"></i>
+                            <span>Quotations</span>
+                        </div>
+                    </a>
+
+                    <a href="/SalesManagement/Orders" class="menu-link @(currentController == "SalesManagement" && currentAction == "Orders" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-folder-open menu-icon"></i>
+                            <span>Sales Orders</span>
+                        </div>
+                    </a>
+
+                    <a href="/SalesManagement/Invoices" class="menu-link @(currentController == "SalesManagement" && currentAction == "Invoices" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-file-invoice menu-icon"></i>
+                            <span>Sales Invoices</span>
+                        </div>
+                    </a>
+
+                    @if (!isExecutive)
+                    {
+                        <a href="/SalesManagement/Returns" class="menu-link @(currentController == "SalesManagement" && currentAction == "Returns" ? "active" : "")">
+                            <div>
+                                <i class="fa-solid fa-arrow-rotate-left menu-icon"></i>
+                                <span>Sales Returns</span>
+                            </div>
+                        </a>
+
+                        <a href="/SalesManagement/Receivables" class="menu-link @(currentController == "SalesManagement" && currentAction == "Receivables" ? "active" : "")">
+                            <div>
+                                <i class="fa-solid fa-money-bill-trend-up menu-icon"></i>
+                                <span>Payments / Receivables</span>
+                            </div>
+                        </a>
+
+                        <div class="menu-title font-bold text-uppercase" style="font-size: 0.7rem; color: rgba(255,255,255,0.45); padding: 0.75rem 1rem 0.25rem; letter-spacing: 0.5px;">Sales Team</div>
+                        <a href="/SalesTeam/Executives" class="menu-link @(currentController == "SalesTeam" && currentAction == "Executives" ? "active" : "")">
+                            <div>
+                                <i class="fa-solid fa-user-tag menu-icon"></i>
+                                <span>Sales Executives</span>
+                            </div>
+                        </a>
+                        <a href="/SalesTeam/Coordinators" class="menu-link @(currentController == "SalesTeam" && currentAction == "Coordinators" ? "active" : "")">
+                            <div>
+                                <i class="fa-solid fa-user-tie menu-icon"></i>
+                                <span>Sales Coordinators</span>
+                            </div>
+                        </a>
+                        <a href="/SalesTeam/Targets" class="menu-link @(currentController == "SalesTeam" && currentAction == "Targets" ? "active" : "")">
+                            <div>
+                                <i class="fa-solid fa-bullseye menu-icon"></i>
+                                <span>Sales Targets</span>
+                            </div>
+                        </a>
+                        <a href="/SalesTeam/Performance" class="menu-link @(currentController == "SalesTeam" && currentAction == "Performance" ? "active" : "")">
+                            <div>
+                                <i class="fa-solid fa-ranking-star menu-icon"></i>
+                                <span>Sales Performance</span>
+                            </div>
+                        </a>
+
+                        <div class="menu-title font-bold text-uppercase" style="font-size: 0.7rem; color: rgba(255,255,255,0.45); padding: 0.75rem 1rem 0.25rem; letter-spacing: 0.5px;">Sales Reports</div>
+                        <a href="/SalesReports/Summary" class="menu-link @(currentController == "SalesReports" && currentAction == "Summary" ? "active" : "")">
+                            <div>
+                                <i class="fa-solid fa-chart-line menu-icon"></i>
+                                <span>Sales Summary</span>
+                            </div>
+                        </a>
+                        <a href="/SalesReports/ByCustomer" class="menu-link @(currentController == "SalesReports" && currentAction == "ByCustomer" ? "active" : "")">
+                            <div>
+                                <i class="fa-solid fa-users-line menu-icon"></i>
+                                <span>Sales by Customer</span>
+                            </div>
+                        </a>
+                        <a href="/SalesReports/ByProduct" class="menu-link @(currentController == "SalesReports" && currentAction == "ByProduct" ? "active" : "")">
+                            <div>
+                                <i class="fa-solid fa-box menu-icon"></i>
+                                <span>Sales by Product</span>
+                            </div>
+                        </a>
+                        <a href="/SalesReports/BySalesperson" class="menu-link @(currentController == "SalesReports" && currentAction == "BySalesperson" ? "active" : "")">
+                            <div>
+                                <i class="fa-solid fa-person-running menu-icon"></i>
+                                <span>Sales by Salesperson</span>
+                            </div>
+                        </a>
+                        <a href="/SalesReports/TargetReport" class="menu-link @(currentController == "SalesReports" && currentAction == "TargetReport" ? "active" : "")">
+                            <div>
+                                <i class="fa-solid fa-crosshairs menu-icon"></i>
+                                <span>Sales Target Report</span>
+                            </div>
+                        </a>
+                        <a href="/SalesReports/ReceivablesReport" class="menu-link @(currentController == "SalesReports" && currentAction == "ReceivablesReport" ? "active" : "")">
+                            <div>
+                                <i class="fa-solid fa-calendar-check menu-icon"></i>
+                                <span>Receivables Report</span>
+                            </div>
+                        </a>
+
+                        <!-- 1. Team Management & Field Monitoring -->
+                        <div class="sidebar-heading text-uppercase text-muted px-3 mt-3 mb-1" style="font-size: 0.72rem;">
+                            TEAM MANAGEMENT
+                        </div>
+                        <ul class="nav flex-column mb-2">
+                            <li class="nav-item">
+                                <a class="nav-link" href="@Url.Action("TeamAttendance", "SalesManagerDashboard")">
+                                    <i class="fa fa-user-clock me-2"></i> Sales Team Radar
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link" href="@Url.Action("Tasks", "SalesManagerDashboard")">
+                                    <i class="fa fa-tasks me-2"></i> Assign & Track Targets
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link" href="@Url.Action("Approvals", "Manager")">
+                                    <i class="fa fa-clipboard-check me-2"></i> Team Approvals
+                                </a>
+                            </li>
+                        </ul>
+
+                        <!-- 2. Personal Employee Self-Service (ESS) -->
+                        <div class="sidebar-heading text-uppercase text-muted px-3 mt-3 mb-1" style="font-size: 0.72rem;">
+                            MY SELF-SERVICE
+                        </div>
+                        <ul class="nav flex-column mb-2">
+                            <li class="nav-item">
+                                <a class="nav-link" href="@Url.Action("Index", "EmployeeDashboard")">
+                                    <i class="fa fa-user-circle me-2"></i> My Employee Portal
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link" href="@Url.Action("ClockInOut", "ESSAttendance")">
+                                    <i class="fa fa-fingerprint me-2"></i> My Clock-In / Out
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link" href="@Url.Action("Apply", "ESSLeave")">
+                                    <i class="fa fa-calendar-minus me-2"></i> Apply Personal Leave
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link @(currentController == "ESSPurchase" ? "active" : "")" href="@Url.Action("Create", "ESSPurchase")">
+                                    <i class="fa fa-cart-plus me-2"></i> Request Material / PR
+                                </a>
+                            </li>
+                        </ul>
+                    }
+
+                    <div class="menu-title font-bold text-uppercase" style="font-size: 0.7rem; color: rgba(255,255,255,0.45); padding: 0.75rem 1rem 0.25rem; letter-spacing: 0.5px;">System</div>
+                    <a href="/Notifications" class="menu-link @(currentController == "Notifications" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-bell menu-icon"></i>
+                            <span>Notifications</span>
+                        </div>
+                    </a>
+                }
+                else if (userRole == "HR")
+                {
+                    var hrDashUrl = "/HR";
+                    var isHrDashActive = currentController == "HR" && currentAction == "Index";
+
+                    <div class="menu-title font-bold text-uppercase" style="font-size: 0.7rem; color: rgba(255,255,255,0.45); padding: 0.75rem 1rem 0.25rem; letter-spacing: 0.5px;">Main</div>
+                    <a href="@hrDashUrl" class="menu-link @(isHrDashActive ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-gauge menu-icon"></i>
+                            <span>HR Dashboard</span>
+                        </div>
+                    </a>
+
+                    <div class="menu-title font-bold text-uppercase" style="font-size: 0.7rem; color: rgba(255,255,255,0.45); padding: 0.75rem 1rem 0.25rem; letter-spacing: 0.5px;">Employee Management</div>
+                    <a href="/HREmployee/Directory" class="menu-link @(currentController == "HREmployee" && currentAction == "Directory" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-users menu-icon"></i>
+                            <span>Employee Directory</span>
+                        </div>
+                    </a>
+                    <a href="/HREmployee/Onboarding" class="menu-link @(currentController == "HREmployee" && currentAction == "Onboarding" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-user-plus menu-icon"></i>
+                            <span>Onboarding & KYC</span>
+                        </div>
+                    </a>
+                    <a href="/HREmployee/Contracts" class="menu-link @(currentController == "HREmployee" && currentAction == "Contracts" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-file-contract menu-icon"></i>
+                            <span>Contracts & Docs</span>
+                        </div>
+                    </a>
+                    <a href="/HREmployee/Transfers" class="menu-link @(currentController == "HREmployee" && currentAction == "Transfers" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-arrows-spin menu-icon"></i>
+                            <span>Transfers & Promotions</span>
+                        </div>
+                    </a>
+                    <a href="/HREmployee/Offboarding" class="menu-link @(currentController == "HREmployee" && currentAction == "Offboarding" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-user-xmark menu-icon"></i>
+                            <span>Offboarding & Exit</span>
+                        </div>
+                    </a>
+
+                    <div class="menu-title font-bold text-uppercase" style="font-size: 0.7rem; color: rgba(255,255,255,0.45); padding: 0.75rem 1rem 0.25rem; letter-spacing: 0.5px;">Helpdesk & Grievances</div>
+                    <a href="/HelpdeskResolution/DepartmentQueue" class="menu-link @(currentController == "HelpdeskResolution" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-headset menu-icon"></i>
+                            <span>Employee Helpdesk Queue</span>
+                        </div>
+                    </a>
+
+                    <div class="menu-title font-bold text-uppercase" style="font-size: 0.7rem; color: rgba(255,255,255,0.45); padding: 0.75rem 1rem 0.25rem; letter-spacing: 0.5px;">Attendance & Shifts</div>
+                    <a href="/HRAttendance/DailyLogs" class="menu-link @(currentController == "HRAttendance" && currentAction == "DailyLogs" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-calendar-check menu-icon"></i>
+                            <span>Daily Attendance Logs</span>
+                        </div>
+                    </a>
+                    <a href="/HRAttendance/Biometric" class="menu-link @(currentController == "HRAttendance" && currentAction == "Biometric" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-fingerprint menu-icon"></i>
+                            <span>Biometric & Geo-Punches</span>
+                        </div>
+                    </a>
+                    <a href="/HRAttendance/ShiftScheduling" class="menu-link @(currentController == "HRAttendance" && currentAction == "ShiftScheduling" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-clock menu-icon"></i>
+                            <span>Shift Rosters</span>
+                        </div>
+                    </a>
+                    <a href="/HRAttendance/Overtime" class="menu-link @(currentController == "HRAttendance" && currentAction == "Overtime" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-business-time menu-icon"></i>
+                            <span>Overtime Tracker</span>
+                        </div>
+                    </a>
+                    <a href="/HRAttendance/Regularization" class="menu-link @(currentController == "HRAttendance" && currentAction == "Regularization" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-envelope-open-text menu-icon"></i>
+                            <span>Attendance Requests</span>
+                        </div>
+                    </a>
+
+                    <div class="menu-title font-bold text-uppercase" style="font-size: 0.7rem; color: rgba(255,255,255,0.45); padding: 0.75rem 1rem 0.25rem; letter-spacing: 0.5px;">Leave Management</div>
+                    <a href="/HRLeave/Policy" class="menu-link @(currentController == "HRLeave" && currentAction == "Policy" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-file-invoice menu-icon"></i>
+                            <span>Leave Policy & Types</span>
+                        </div>
+                    </a>
+                    <a href="/HRLeave/Applications" class="menu-link @(currentController == "HRLeave" && currentAction == "Applications" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-file-circle-plus menu-icon"></i>
+                            <span>Leave Applications</span>
+                        </div>
+                    </a>
+                    <a href="/HRLeave/BalanceLedger" class="menu-link @(currentController == "HRLeave" && currentAction == "BalanceLedger" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-scale-balanced menu-icon"></i>
+                            <span>Leave Balance Ledger</span>
+                        </div>
+                    </a>
+                    <a href="/HRLeave/Approvals" class="menu-link @(currentController == "HRLeave" && currentAction == "Approvals" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-check-double menu-icon"></i>
+                            <span>Leave Approvals</span>
+                        </div>
+                    </a>
+                    <a href="/HRLeave/HolidayList" class="menu-link @(currentController == "HRLeave" && currentAction == "HolidayList" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-umbrella-beach menu-icon"></i>
+                            <span>Holiday List</span>
+                        </div>
+                    </a>
+
+                    <div class="menu-title font-bold text-uppercase" style="font-size: 0.7rem; color: rgba(255,255,255,0.45); padding: 0.75rem 1rem 0.25rem; letter-spacing: 0.5px;">Payroll Management</div>
+                    <a href="/HRPayroll/SalaryStructures" class="menu-link @(currentController == "HRPayroll" && currentAction == "SalaryStructures" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-wallet menu-icon"></i>
+                            <span>Salary Structures</span>
+                        </div>
+                    </a>
+                    <a href="/HRPayroll/AllowancesDeductions" class="menu-link @(currentController == "HRPayroll" && currentAction == "AllowancesDeductions" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-percent menu-icon"></i>
+                            <span>Allowances & Deductions</span>
+                        </div>
+                    </a>
+                    <a href="/HRPayroll/StatutoryCompliance" class="menu-link @(currentController == "HRPayroll" && currentAction == "StatutoryCompliance" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-building-shield menu-icon"></i>
+                            <span>PF / ESI / TDS</span>
+                        </div>
+                    </a>
+                    <a href="/HRPayroll/PayrollProcessing" class="menu-link @(currentController == "HRPayroll" && currentAction == "PayrollProcessing" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-receipt menu-icon"></i>
+                            <span>Payroll Processing</span>
+                        </div>
+                    </a>
+                    <a href="/HRPayroll/Payslips" class="menu-link @(currentController == "HRPayroll" && currentAction == "Payslips" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-money-check-dollar menu-icon"></i>
+                            <span>Payslips</span>
+                        </div>
+                    </a>
+                    <a href="/HRPayroll/BonusIncentives" class="menu-link @(currentController == "HRPayroll" && currentAction == "BonusIncentives" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-gift menu-icon"></i>
+                            <span>Bonus & Incentives</span>
+                        </div>
+                    </a>
+
+                    <div class="menu-title font-bold text-uppercase" style="font-size: 0.7rem; color: rgba(255,255,255,0.45); padding: 0.75rem 1rem 0.25rem; letter-spacing: 0.5px;">Recruitment (ATS)</div>
+                    <a href="/HRRecruitment/JobOpenings" class="menu-link @(currentController == "HRRecruitment" && currentAction == "JobOpenings" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-briefcase menu-icon"></i>
+                            <span>Job Openings</span>
+                        </div>
+                    </a>
+                    <a href="/HRRecruitment/CandidatePipeline" class="menu-link @(currentController == "HRRecruitment" && currentAction == "CandidatePipeline" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-users-viewfinder menu-icon"></i>
+                            <span>Candidate Pipeline</span>
+                        </div>
+                    </a>
+                    <a href="/HRRecruitment/InterviewSchedules" class="menu-link @(currentController == "HRRecruitment" && currentAction == "InterviewSchedules" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-calendar-days menu-icon"></i>
+                            <span>Interview Schedules</span>
+                        </div>
+                    </a>
+                    <a href="/HRRecruitment/OfferLetters" class="menu-link @(currentController == "HRRecruitment" && currentAction == "OfferLetters" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-envelope-open-text menu-icon"></i>
+                            <span>Offer Letters</span>
+                        </div>
+                    </a>
+
+                    <div class="menu-title font-bold text-uppercase" style="font-size: 0.7rem; color: rgba(255,255,255,0.45); padding: 0.75rem 1rem 0.25rem; letter-spacing: 0.5px;">Performance & Appraisals</div>
+                    <a href="/HRPerformance/OkrKpi" class="menu-link @(currentController == "HRPerformance" && currentAction == "OkrKpi" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-bullseye menu-icon"></i>
+                            <span>OKR & KPI Setup</span>
+                        </div>
+                    </a>
+                    <a href="/HRPerformance/AppraisalCycles" class="menu-link @(currentController == "HRPerformance" && currentAction == "AppraisalCycles" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-arrows-spin menu-icon"></i>
+                            <span>Appraisal Cycles</span>
+                        </div>
+                    </a>
+                    <a href="/HRPerformance/RatingCards" class="menu-link @(currentController == "HRPerformance" && currentAction == "RatingCards" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-id-card-clip menu-icon"></i>
+                            <span>Employee Rating Cards</span>
+                        </div>
+                    </a>
+
+                    <div class="menu-title font-bold text-uppercase" style="font-size: 0.7rem; color: rgba(255,255,255,0.45); padding: 0.75rem 1rem 0.25rem; letter-spacing: 0.5px;">HR Reports</div>
+                    <a href="/HRReports/AttendanceLate" class="menu-link @(currentController == "HRReports" && currentAction == "AttendanceLate" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-chart-line menu-icon"></i>
+                            <span>Attendance & Late Report</span>
+                        </div>
+                    </a>
+                    <a href="/HRReports/PayrollSummary" class="menu-link @(currentController == "HRReports" && currentAction == "PayrollSummary" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-chart-column menu-icon"></i>
+                            <span>Payroll Summary Report</span>
+                        </div>
+                    </a>
+                    <a href="/HRReports/LeaveBalance" class="menu-link @(currentController == "HRReports" && currentAction == "LeaveBalance" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-chart-pie menu-icon"></i>
+                            <span>Leave Balance Report</span>
+                        </div>
+                    </a>
+                    <a href="/HRReports/AttritionHeadcount" class="menu-link @(currentController == "HRReports" && currentAction == "AttritionHeadcount" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-users-slash menu-icon"></i>
+                            <span>Attrition & Headcount</span>
+                        </div>
+                    </a>
+                    <a href="/HRReports/TaxDeduction" class="menu-link @(currentController == "HRReports" && currentAction == "TaxDeduction" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-building-columns menu-icon"></i>
+                            <span>Tax Deduction Report</span>
+                        </div>
+                    </a>
+
+                    <div class="menu-title font-bold text-uppercase" style="font-size: 0.7rem; color: rgba(255,255,255,0.45); padding: 0.75rem 1rem 0.25rem; letter-spacing: 0.5px;">My Self-Service</div>
+                    <a href="@Url.Action("Index", "EmployeeDashboard")" class="menu-link @(currentController == "EmployeeDashboard" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-user-circle menu-icon"></i>
+                            <span>My Employee Portal</span>
+                        </div>
+                    </a>
+                    <a href="@Url.Action("ClockInOut", "ESSAttendance")" class="menu-link @(currentController == "ESSAttendance" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-fingerprint menu-icon"></i>
+                            <span>My Clock-In / Out</span>
+                        </div>
+                    </a>
+                    <a href="@Url.Action("Apply", "ESSLeave")" class="menu-link @(currentController == "ESSLeave" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-calendar-minus menu-icon"></i>
+                            <span>Apply Personal Leave</span>
+                        </div>
+                    </a>
+                    <a href="@Url.Action("Create", "ESSPurchase")" class="menu-link @(currentController == "ESSPurchase" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-cart-plus menu-icon"></i>
+                            <span>Request Material / PR</span>
+                        </div>
+                    </a>
+
+                    <div class="menu-title font-bold text-uppercase" style="font-size: 0.7rem; color: rgba(255,255,255,0.45); padding: 0.75rem 1rem 0.25rem; letter-spacing: 0.5px;">System</div>
+                    <a href="/Notifications" class="menu-link @(currentController == "Notifications" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-bell menu-icon"></i>
+                            <span>Notifications</span>
+                        </div>
+                    </a>
+                }
+                else if (userRole == "Employee")
+                {
+                    var isDashboardActive = currentController == "EmployeeDashboard";
+
+                    <div class="menu-title font-bold text-uppercase" style="font-size: 0.7rem; color: rgba(255,255,255,0.45); padding: 0.75rem 1rem 0.25rem; letter-spacing: 0.5px;">Main</div>
+                    <a href="/EmployeeDashboard" class="menu-link @(isDashboardActive ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-gauge menu-icon"></i>
+                            <span>Employee Dashboard</span>
+                        </div>
+                    </a>
+
+                    <div class="menu-title font-bold text-uppercase" style="font-size: 0.7rem; color: rgba(255,255,255,0.45); padding: 0.75rem 1rem 0.25rem; letter-spacing: 0.5px;">My Attendance</div>
+                    <a href="/ESSAttendance/ClockInOut" class="menu-link @(currentController == "ESSAttendance" && currentAction == "ClockInOut" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-clock-rotate-left menu-icon"></i>
+                            <span>Web Clock-In / Out</span>
+                        </div>
+                    </a>
+                    <a href="/ESSAttendance/Calendar" class="menu-link @(currentController == "ESSAttendance" && currentAction == "Calendar" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-calendar-days menu-icon"></i>
+                            <span>Attendance Calendar</span>
+                        </div>
+                    </a>
+                    <a href="/ESSAttendance/Regularization" class="menu-link @(currentController == "ESSAttendance" && currentAction == "Regularization" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-envelope-open-text menu-icon"></i>
+                            <span>Regularization Request</span>
+                        </div>
+                    </a>
+
+                    <div class="menu-title font-bold text-uppercase" style="font-size: 0.7rem; color: rgba(255,255,255,0.45); padding: 0.75rem 1rem 0.25rem; letter-spacing: 0.5px;">My Leaves</div>
+                    <a href="/ESSLeave/Apply" class="menu-link @(currentController == "ESSLeave" && currentAction == "Apply" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-file-circle-plus menu-icon"></i>
+                            <span>Apply for Leave</span>
+                        </div>
+                    </a>
+                    <a href="/ESSLeave/BalanceSummary" class="menu-link @(currentController == "ESSLeave" && currentAction == "BalanceSummary" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-scale-balanced menu-icon"></i>
+                            <span>Leave Balance Summary</span>
+                        </div>
+                    </a>
+                    <a href="/ESSLeave/History" class="menu-link @(currentController == "ESSLeave" && currentAction == "History" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-clock-rotate-left menu-icon"></i>
+                            <span>Leave History</span>
+                        </div>
+                    </a>
+
+                    <div class="menu-title font-bold text-uppercase" style="font-size: 0.7rem; color: rgba(255,255,255,0.45); padding: 0.75rem 1rem 0.25rem; letter-spacing: 0.5px;">My Tasks & Timesheets</div>
+                    <a href="/ESSTasks/Assigned" class="menu-link @(currentController == "ESSTasks" && currentAction == "Assigned" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-list-check menu-icon"></i>
+                            <span>Assigned Tasks</span>
+                        </div>
+                    </a>
+                    <a href="/ESSTasks/Timesheet" class="menu-link @(currentController == "ESSTasks" && currentAction == "Timesheet" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-business-time menu-icon"></i>
+                            <span>Daily Timesheet Entry</span>
+                        </div>
+                    </a>
+                    <a href="/ESSTasks/StatusUpdate" class="menu-link @(currentController == "ESSTasks" && currentAction == "StatusUpdate" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-arrows-spin menu-icon"></i>
+                            <span>Task Status Update</span>
+                        </div>
+                    </a>
+
+                    <div class="menu-title font-bold text-uppercase" style="font-size: 0.7rem; color: rgba(255,255,255,0.45); padding: 0.75rem 1rem 0.25rem; letter-spacing: 0.5px;">Pay & Documents</div>
+                    <a href="/ESSPayDocuments/Payslips" class="menu-link @(currentController == "ESSPayDocuments" && currentAction == "Payslips" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-file-invoice-dollar menu-icon"></i>
+                            <span>Download Payslips</span>
+                        </div>
+                    </a>
+                    <a href="/ESSPayDocuments/TaxDeduction" class="menu-link @(currentController == "ESSPayDocuments" && currentAction == "TaxDeduction" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-building-columns menu-icon"></i>
+                            <span>Tax Deduction / Form 16</span>
+                        </div>
+                    </a>
+                    <a href="/ESSPayDocuments/CompanyPolicies" class="menu-link @(currentController == "ESSPayDocuments" && currentAction == "CompanyPolicies" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-file-shield menu-icon"></i>
+                            <span>Company Policy Docs</span>
+                        </div>
+                    </a>
+
+                    <div class="menu-title font-bold text-uppercase" style="font-size: 0.7rem; color: rgba(255,255,255,0.45); padding: 0.75rem 1rem 0.25rem; letter-spacing: 0.5px;">My Claims & Reimbursements</div>
+                    <a href="/ESSClaims/Submit" class="menu-link @(currentController == "ESSClaims" && currentAction == "Submit" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-wallet menu-icon"></i>
+                            <span>Submit Expense Claim</span>
+                        </div>
+                    </a>
+                    <a href="/ESSClaims/StatusTracker" class="menu-link @(currentController == "ESSClaims" && currentAction == "StatusTracker" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-map-location-dot menu-icon"></i>
+                            <span>Claim Status Tracker</span>
+                        </div>
+                    </a>
+
+                    <div class="menu-title font-bold text-uppercase" style="font-size: 0.7rem; color: rgba(255,255,255,0.45); padding: 0.75rem 1rem 0.25rem; letter-spacing: 0.5px;">Material & Procurement</div>
+                    <a href="/ESSPurchase/Create" class="menu-link @(currentController == "ESSPurchase" && currentAction == "Create" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-cart-plus menu-icon"></i>
+                            <span>Request Material / PR</span>
+                        </div>
+                    </a>
+                    <a href="/ESSPurchase" class="menu-link @(currentController == "ESSPurchase" && currentAction == "Index" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-clipboard-list menu-icon"></i>
+                            <span>My PR History</span>
+                        </div>
+                    </a>
+
+                    <div class="menu-title font-bold text-uppercase" style="font-size: 0.7rem; color: rgba(255,255,255,0.45); padding: 0.75rem 1rem 0.25rem; letter-spacing: 0.5px;">Directory & Helpdesk</div>
+                    <a href="/ESSHelpdesk/Directory" class="menu-link @(currentController == "ESSHelpdesk" && currentAction == "Directory" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-address-book menu-icon"></i>
+                            <span>Employee Directory</span>
+                        </div>
+                    </a>
+                    <a href="/ESSHelpdesk/RaiseTicket" class="menu-link @(currentController == "ESSHelpdesk" && currentAction == "RaiseTicket" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-circle-question menu-icon"></i>
+                            <span>Raise Support Ticket</span>
+                        </div>
+                    </a>
+                    @if (User.IsInRole("HR") || User.IsInRole("Admin") || User.IsInRole("Super Admin") || User.IsInRole("IT Support") || User.IsInRole("IT") || User.IsInRole("Manager"))
+                    {
+                        <a href="/HelpdeskResolution/DepartmentQueue" class="menu-link @(currentController == "HelpdeskResolution" ? "active" : "")">
+                            <div>
+                                <i class="fa-solid fa-headset menu-icon"></i>
+                                <span>Department Service Queue</span>
+                            </div>
+                        </a>
+                    }
+
+                    @if (User.IsInRole("HR") || User.IsInRole("Admin") || User.IsInRole("Super Admin"))
+                    {
+                        <div class="menu-title font-bold text-uppercase" style="font-size: 0.7rem; color: rgba(255,255,255,0.45); padding: 0.75rem 1rem 0.25rem; letter-spacing: 0.5px;">HR Operations</div>
+                        @if (allowedModules.Contains("HRManagement_EmployeeDirectory") || allowedModules.Contains("EmployeeManagement"))
+                        {
+                            <a href="/HREmployee/Directory" class="menu-link @(currentController == "HREmployee" && currentAction == "Directory" ? "active" : "")">
+                                <div><i class="fa-solid fa-users menu-icon"></i><span>Employee Directory</span></div>
+                            </a>
+                        }
+                        @if (allowedModules.Contains("HRManagement_DailyAttendance"))
+                        {
+                            <a href="/HRAttendance/DailyLogs" class="menu-link @(currentController == "HRAttendance" ? "active" : "")">
+                                <div><i class="fa-solid fa-calendar-check menu-icon"></i><span>Attendance Logs</span></div>
+                            </a>
+                        }
+                        @if (allowedModules.Contains("HRManagement_LeaveRequests"))
+                        {
+                            <a href="/HRLeave/Requests" class="menu-link @(currentController == "HRLeave" ? "active" : "")">
+                                <div><i class="fa-solid fa-umbrella-beach menu-icon"></i><span>Leave Approvals</span></div>
+                            </a>
+                        }
+                        @if (allowedModules.Contains("HRManagement_MonthlyPayroll"))
+                        {
+                            <a href="/HRPayroll/PayrollProcessing" class="menu-link @(currentController == "HRPayroll" ? "active" : "")">
+                                <div><i class="fa-solid fa-file-invoice-dollar menu-icon"></i><span>Payroll Processing</span></div>
+                            </a>
+                        }
+                        <a href="/HelpdeskResolution/DepartmentQueue" class="menu-link @(currentController == "HelpdeskResolution" ? "active" : "")">
+                            <div><i class="fa-solid fa-headset menu-icon"></i><span>Helpdesk Resolution Queue</span></div>
+                        </a>
+                    }
+
+                    @if (showInventoryMgmt || showProductMgmt || showPurchaseMgmt)
+                    {
+                        <div class="menu-title font-bold text-uppercase" style="font-size: 0.7rem; color: rgba(255,255,255,0.45); padding: 0.75rem 1rem 0.25rem; letter-spacing: 0.5px;">Warehouse & Supply Chain</div>
+                        @if (allowedModules.Contains("SupplyChain_InventoryStock") || allowedModules.Contains("InventoryManagement") || allowedModules.Contains("ProductManagement"))
+                        {
+                            <a href="/InvCatalog/Items" class="menu-link @(currentController == "InvCatalog" ? "active" : "")">
+                                <div><i class="fa-solid fa-boxes-stacked menu-icon"></i><span>Items & Stock</span></div>
+                            </a>
+                        }
+                        @if (allowedModules.Contains("SupplyChain_PurchaseOrders") || allowedModules.Contains("PurchaseManagement"))
+                        {
+                            <a href="/PurchaseOrders" class="menu-link @(currentController == "PurchaseOrders" || currentController == "PurchaseManagement" ? "active" : "")">
+                                <div><i class="fa-solid fa-file-signature menu-icon"></i><span>Purchase Orders</span></div>
+                            </a>
+                        }
+                        @if (allowedModules.Contains("SupplyChain_GoodsReceipt"))
+                        {
+                            <a href="/GoodsReceipt" class="menu-link @(currentController == "GoodsReceipt" ? "active" : "")">
+                                <div><i class="fa-solid fa-clipboard-check menu-icon"></i><span>Goods Receipt (GRN)</span></div>
+                            </a>
+                        }
+                    }
+
+                    @if (showSalesMgmt || showCustomerMgmt)
+                    {
+                        <div class="menu-title font-bold text-uppercase" style="font-size: 0.7rem; color: rgba(255,255,255,0.45); padding: 0.75rem 1rem 0.25rem; letter-spacing: 0.5px;">Sales & CRM</div>
+                        @if (allowedModules.Contains("SalesCRM_CustomerDirectory") || allowedModules.Contains("CustomerManagement"))
+                        {
+                            <a href="/Customers" class="menu-link @(currentController == "Customers" ? "active" : "")">
+                                <div><i class="fa-solid fa-address-book menu-icon"></i><span>Customer Directory</span></div>
+                            </a>
+                        }
+                        @if (allowedModules.Contains("SalesCRM_QuotationsEstimates"))
+                        {
+                            <a href="/SalesManagement/Quotations" class="menu-link @(currentController == "SalesManagement" && currentAction == "Quotations" ? "active" : "")">
+                                <div><i class="fa-solid fa-calculator menu-icon"></i><span>Quotations</span></div>
+                            </a>
+                        }
+                        @if (allowedModules.Contains("SalesCRM_OrdersInvoicing") || allowedModules.Contains("SalesManagement"))
+                        {
+                            <a href="/Sales" class="menu-link @(currentController == "Sales" ? "active" : "")">
+                                <div><i class="fa-solid fa-receipt menu-icon"></i><span>Sales & Orders</span></div>
+                            </a>
+                        }
+                    }
+
+                    @if (showAccounting || showExpenseMgmt || showReports)
+                    {
+                        <div class="menu-title font-bold text-uppercase" style="font-size: 0.7rem; color: rgba(255,255,255,0.45); padding: 0.75rem 1rem 0.25rem; letter-spacing: 0.5px;">Finance & Accounts</div>
+                        @if (allowedModules.Contains("FinanceAccounts_GeneralLedger") || allowedModules.Contains("Accounting") || allowedModules.Contains("ExpenseManagement"))
+                        {
+                            <a href="/Finance/Ledger" class="menu-link @(currentController == "Finance" && currentAction == "Ledger" ? "active" : "")">
+                                <div><i class="fa-solid fa-book-open menu-icon"></i><span>General Ledger & JV</span></div>
+                            </a>
+                        }
+                        @if (allowedModules.Contains("FinanceAccounts_ReportsTax") || allowedModules.Contains("Reports"))
+                        {
+                            <a href="/FinanceReports" class="menu-link @(currentController == "FinanceReports" ? "active" : "")">
+                                <div><i class="fa-solid fa-chart-pie menu-icon"></i><span>Financial Reports</span></div>
+                            </a>
+                        }
+                    }
+
+                    @if (showCompany || showBranchMgmt || showUserMgmt || showSettings)
+                    {
+                        <div class="menu-title font-bold text-uppercase" style="font-size: 0.7rem; color: rgba(255,255,255,0.45); padding: 0.75rem 1rem 0.25rem; letter-spacing: 0.5px;">Administration</div>
+                        @if (allowedModules.Contains("UserManagement"))
+                        {
+                            <a href="/UserManagement" class="menu-link @(currentController == "UserManagement" ? "active" : "")">
+                                <div><i class="fa-solid fa-user-shield menu-icon"></i><span>User Accounts</span></div>
+                            </a>
+                        }
+                        @if (allowedModules.Contains("Company"))
+                        {
+                            <a href="/Company" class="menu-link @(currentController == "Company" ? "active" : "")">
+                                <div><i class="fa-solid fa-building menu-icon"></i><span>Company Settings</span></div>
+                            </a>
+                        }
+                        @if (allowedModules.Contains("BranchManagement"))
+                        {
+                            <a href="/Branches" class="menu-link @(currentController == "Branches" ? "active" : "")">
+                                <div><i class="fa-solid fa-code-branch menu-icon"></i><span>Branch Operations</span></div>
+                            </a>
+                        }
+                    }
+                }
+                else if (userRole == "Inventory Manager" || User.IsInRole("Inventory Manager"))
+                {
+                    <!-- CORE INVENTORY -->
+                    <div class="sidebar-heading text-uppercase text-muted px-3 mt-3 mb-1" style="font-size: 0.72rem;">
+                        PRODUCT & CATALOG MASTER
+                    </div>
+                    <ul class="nav flex-column mb-2">
+                        <li class="nav-item">
+                            <a class="nav-link @(ViewContext.RouteData.Values["action"]?.ToString() == "Index" && (ViewContext.RouteData.Values["controller"]?.ToString() == "InventoryDashboard" || ViewContext.RouteData.Values["controller"] == null) ? "active" : "")" 
+                               href="@Url.Action("Index", "InventoryDashboard")">
+                                <i class="fa fa-boxes me-2"></i> Inventory Dashboard
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "ItemMaster" && ViewContext.RouteData.Values["action"]?.ToString() == "Index" ? "active" : "")" href="@Url.Action("Index", "ItemMaster")">
+                                <i class="fa fa-tags me-2"></i> Items & SKUs
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "ItemMaster" && ViewContext.RouteData.Values["action"]?.ToString() == "Categories" ? "active" : "")" href="@Url.Action("Categories", "ItemMaster")">
+                                <i class="fa fa-folder me-2"></i> Categories & Sub-Categories
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "ItemMaster" && ViewContext.RouteData.Values["action"]?.ToString() == "UOM" ? "active" : "")" href="@Url.Action("UOM", "ItemMaster")">
+                                <i class="fa fa-balance-scale me-2"></i> Units of Measure (UOM)
+                            </a>
+                        </li>
+                    </ul>
+
+                    <div class="sidebar-heading text-uppercase text-muted px-3 mt-3 mb-1" style="font-size: 0.72rem;">
+                        WAREHOUSE OPERATIONS
+                    </div>
+                    <ul class="nav flex-column mb-2">
+                        <li class="nav-item">
+                            <a class="nav-link @(ViewContext.RouteData.Values["action"]?.ToString() == "Warehouses" ? "active" : "")" href="@Url.Action("Warehouses", "InventoryDashboard")">
+                                <i class="fa fa-warehouse me-2"></i> Warehouses & Locations
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link @(ViewContext.RouteData.Values["action"]?.ToString() == "BinLocations" ? "active" : "")" href="@Url.Action("BinLocations", "InventoryDashboard")">
+                                <i class="fa fa-th me-2"></i> Bin & Rack Master
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "GRN" ? "active" : "")" href="@Url.Action("Index", "GRN")">
+                                <i class="fa fa-receipt me-2"></i> Goods Receipt Note (GRN)
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link @(ViewContext.RouteData.Values["action"]?.ToString() == "Dispatch" ? "active" : "")" href="@Url.Action("Dispatch", "InventoryDashboard")">
+                                <i class="fa fa-truck-loading me-2"></i> Material Dispatch (Outward)
+                            </a>
+                        </li>
+                    </ul>
+
+                    <!-- TEAM MANAGEMENT (REAL DATA ACTIONS) -->
+                    <div class="sidebar-heading text-uppercase text-muted px-3 mt-3 mb-1" style="font-size: 0.72rem;">
+                        TEAM MANAGEMENT
+                    </div>
+                    <ul class="nav flex-column mb-2">
+                        <li class="nav-item">
+                            <a class="nav-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "InventoryDashboard" && ViewContext.RouteData.Values["action"]?.ToString() == "TeamAttendance" ? "active" : "")" href="@Url.Action("TeamAttendance", "InventoryDashboard")">
+                                <i class="fa fa-user-clock me-2"></i> Team Attendance Radar
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "InventoryDashboard" && ViewContext.RouteData.Values["action"]?.ToString() == "Tasks" ? "active" : "")" href="@Url.Action("Tasks", "InventoryDashboard")">
+                                <i class="fa fa-tasks me-2"></i> Assign & Track Tasks
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Manager" && ViewContext.RouteData.Values["action"]?.ToString() == "Approvals" ? "active" : "")" href="@Url.Action("Approvals", "Manager")">
+                                <i class="fa fa-clipboard-check me-2"></i> Team Approvals
+                            </a>
+                        </li>
+                    </ul>
+
+                    <!-- EMPLOYEE SELF SERVICE (ESS) -->
+                    <div class="sidebar-heading text-uppercase text-muted px-3 mt-3 mb-1" style="font-size: 0.72rem;">
+                        MY SELF-SERVICE
+                    </div>
+                    <ul class="nav flex-column mb-2">
+                        <li class="nav-item">
+                            <a class="nav-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "EmployeeDashboard" ? "active" : "")" href="@Url.Action("Index", "EmployeeDashboard")">
+                                <i class="fa fa-user-circle me-2"></i> My Employee Portal
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "ESSAttendance" && ViewContext.RouteData.Values["action"]?.ToString() == "ClockInOut" ? "active" : "")" href="@Url.Action("ClockInOut", "ESSAttendance")">
+                                <i class="fa fa-fingerprint me-2"></i> My Clock-In / Out
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "ESSLeave" ? "active" : "")" href="@Url.Action("Apply", "ESSLeave")">
+                                <i class="fa fa-calendar-minus me-2"></i> Apply Personal Leave
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "ESSPurchase" ? "active" : "")" href="@Url.Action("Create", "ESSPurchase")">
+                                <i class="fa fa-cart-plus me-2"></i> Request Material / PR
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "ESSAttendance" && ViewContext.RouteData.Values["action"]?.ToString() == "Calendar" ? "active" : "")" href="@Url.Action("Calendar", "ESSAttendance")">
+                                <i class="fa fa-calendar-alt me-2"></i> Attendance Calendar
+                            </a>
+                        </li>
+                    </ul>
+                }
+                else if (userRole == "Auditor" || User.IsInRole("Auditor"))
+                {
+                    <div class="sidebar-heading text-uppercase text-muted px-3 mt-3 mb-1" style="font-size: 0.72rem;">
+                        AUDIT & COMPLIANCE
+                    </div>
+                    <ul class="nav flex-column mb-2">
+                        <li class="nav-item">
+                            <a class="nav-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Auditor" && ViewContext.RouteData.Values["action"]?.ToString() == "Index" ? "active" : "")" 
+                               href="@Url.Action("Index", "Auditor")">
+                                <i class="fa fa-shield-alt me-2"></i> Audit Dashboard
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Auditor" && ViewContext.RouteData.Values["action"]?.ToString() == "Logs" ? "active" : "")" href="@Url.Action("Logs", "Auditor")">
+                                <i class="fa fa-fingerprint me-2"></i> System Audit Trails
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Auditor" && ViewContext.RouteData.Values["action"]?.ToString() == "FinancialReview" ? "active" : "")" href="@Url.Action("FinancialReview", "Auditor")">
+                                <i class="fa fa-file-invoice-dollar me-2"></i> Financial Vouchers
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Auditor" && ViewContext.RouteData.Values["action"]?.ToString() == "GeneralLedger" ? "active" : "")" 
+                               href="@Url.Action("GeneralLedger", "Auditor")">
+                                <i class="fa fa-book-open me-2"></i> General Ledger (Read-Only)
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link @(currentController == "HRPayroll" && currentAction == "StatutoryCompliance" ? "active" : "")" 
+                               href="/HRPayroll/StatutoryCompliance">
+                                <i class="fa fa-building-shield me-2"></i> Statutory Compliance (PF/ESI/TDS)
+                            </a>
+                        </li>
+                    </ul>
+
+                    <!-- AUDITOR PERSONAL SELF-SERVICE (ESS) -->
+                    <div class="sidebar-heading text-uppercase text-muted px-3 mt-3 mb-1" style="font-size: 0.72rem;">
+                        MY SELF-SERVICE
+                    </div>
+                    <ul class="nav flex-column mb-2">
+                        <li class="nav-item">
+                            <a class="nav-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "EmployeeDashboard" ? "active" : "")" href="@Url.Action("Index", "EmployeeDashboard")">
+                                <i class="fa fa-user-circle me-2"></i> My Employee Portal
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "ESSAttendance" && ViewContext.RouteData.Values["action"]?.ToString() == "ClockInOut" ? "active" : "")" href="@Url.Action("ClockInOut", "ESSAttendance")">
+                                <i class="fa fa-fingerprint me-2"></i> My Clock-In / Out
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "ESSLeave" ? "active" : "")" href="@Url.Action("Apply", "ESSLeave")">
+                                <i class="fa fa-calendar-minus me-2"></i> Apply Personal Leave
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "ESSPurchase" ? "active" : "")" href="@Url.Action("Create", "ESSPurchase")">
+                                <i class="fa fa-cart-plus me-2"></i> Request Material / PR
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "ESSAttendance" && ViewContext.RouteData.Values["action"]?.ToString() == "Calendar" ? "active" : "")" href="@Url.Action("Calendar", "ESSAttendance")">
+                                <i class="fa fa-calendar-alt me-2"></i> Attendance Calendar
+                            </a>
+                        </li>
+                    </ul>
+                }
+                else if (userRole == "Manager")
+                {
+                    var isDashboardActive = currentController == "Manager";
+
+                    <div class="menu-title font-bold text-uppercase" style="font-size: 0.7rem; color: rgba(255,255,255,0.45); padding: 0.75rem 1rem 0.25rem; letter-spacing: 0.5px;">Manager Portal</div>
+                    <a href="/Manager" class="menu-link @(isDashboardActive ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-gauge menu-icon"></i>
+                            <span>Manager Dashboard</span>
+                        </div>
+                    </a>
+
+                    <div class="menu-title font-bold text-uppercase" style="font-size: 0.7rem; color: rgba(255,255,255,0.45); padding: 0.75rem 1rem 0.25rem; letter-spacing: 0.5px;">Team Deliverables</div>
+                    <a href="/Manager/Approvals" class="menu-link @(currentController == "Manager" && currentAction == "Approvals" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-clipboard-check menu-icon"></i>
+                            <span>Approval Center</span>
+                        </div>
+                    </a>
+                    <a href="/Manager/Tasks" class="menu-link @(currentController == "Manager" && currentAction == "Tasks" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-list-check menu-icon"></i>
+                            <span>Task Delegation</span>
+                        </div>
+                    </a>
+                    <a href="/Manager/Team" class="menu-link @(currentController == "Manager" && currentAction == "Team" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-users-gear menu-icon"></i>
+                            <span>Team Directory</span>
+                        </div>
+                    </a>
+                }
+                else if (userRole == "Accountant" || User.IsInRole("Accountant"))
+                {
+                    <!-- 1. Accounting Core Execution -->
+                    <div class="sidebar-heading text-uppercase text-muted px-3 mt-3 mb-1" style="font-size: 0.72rem;">
+                        ACCOUNTING OPERATIONS
+                    </div>
+                    <ul class="nav flex-column mb-2">
+                        <li class="nav-item">
+                            <a class="nav-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Accountant" && ViewContext.RouteData.Values["action"]?.ToString() == "Index" ? "active" : "")" 
+                               href="@Url.Action("Index", "Accountant")">
+                                <i class="fa fa-calculator me-2"></i> Accountant Desk
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Accountant" && ViewContext.RouteData.Values["action"]?.ToString() == "Vouchers" ? "active" : "")" 
+                               href="@Url.Action("Vouchers", "Accountant")">
+                                <i class="fa fa-receipt me-2"></i> Journal & Vouchers
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="@Url.Action("Payables", "Finance")">
+                                <i class="fa fa-file-invoice-dollar me-2"></i> Vendor Bills (AP)
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="@Url.Action("Receivables", "Finance")">
+                                <i class="fa fa-hand-holding-usd me-2"></i> Customer Invoices (AR)
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="@Url.Action("Reconciliation", "Finance")">
+                                <i class="fa fa-university me-2"></i> Bank Reconciliation
+                            </a>
+                        </li>
+                    </ul>
+
+                    <!-- 2. Manager Directives & Tasks -->
+                    <div class="sidebar-heading text-uppercase text-muted px-3 mt-3 mb-1" style="font-size: 0.72rem;">
+                        DELIVERABLES & TASKS
+                    </div>
+                    <ul class="nav flex-column mb-2">
+                        <li class="nav-item">
+                            <a class="nav-link" href="@Url.Action("Index", "ESSTasks")">
+                                <i class="fa fa-tasks me-2"></i> Assigned By Manager
+                            </a>
+                        </li>
+                    </ul>
+
+                    <!-- 3. Employee Self-Service (ESS) -->
+                    <div class="sidebar-heading text-uppercase text-muted px-3 mt-3 mb-1" style="font-size: 0.72rem;">
+                        MY SELF-SERVICE
+                    </div>
+                    <ul class="nav flex-column mb-2">
+                        <li class="nav-item">
+                            <a class="nav-link" href="@Url.Action("Index", "EmployeeDashboard")">
+                                <i class="fa fa-user-circle me-2"></i> My Employee Portal
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="@Url.Action("ClockInOut", "ESSAttendance")">
+                                <i class="fa fa-fingerprint me-2"></i> My Clock-In / Out
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="@Url.Action("Apply", "ESSLeave")">
+                                <i class="fa fa-calendar-minus me-2"></i> Apply Personal Leave
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="@Url.Action("Index", "ESSPayDocuments")">
+                                <i class="fa fa-file-invoice me-2"></i> My Payslips
+                            </a>
+                        </li>
+                    </ul>
+                }
+                else if (userRole == "Finance Manager" || User.IsInRole("Finance Manager"))
+                {
+                    <div class="menu-title font-bold text-uppercase menu-header sidebar-heading" style="font-size: 0.72rem; color: rgba(255,255,255,0.45); padding: 0.75rem 1rem 0.25rem; letter-spacing: 0.5px;">FINANCE & TREASURY</div>
+
+                    <a href="@Url.Action("Index", "Finance")" class="menu-link nav-link @(currentController == "Finance" && currentAction == "Index" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-chart-line menu-icon me-2"></i>
+                            <span>Financial Dashboard</span>
+                        </div>
+                    </a>
+
+                    <a href="@Url.Action("Index", "Expense")" class="menu-link nav-link @(currentController == "Expense" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-receipt menu-icon me-2"></i>
+                            <span>Expense Management</span>
+                        </div>
+                    </a>
+
+                    <a href="@Url.Action("Index", "Accounting")" class="menu-link nav-link @(currentController == "Accounting" || currentController == "Accounts" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-book menu-icon me-2"></i>
+                            <span>Accounting & Ledger</span>
+                        </div>
+                    </a>
+
+                    <a href="@Url.Action("Index", "FinanceReports")" class="menu-link nav-link @(currentController == "FinanceReports" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-file-invoice-dollar menu-icon me-2"></i>
+                            <span>Financial Reports</span>
+                        </div>
+                    </a>
+
+                    <div class="menu-title font-bold text-uppercase menu-header sidebar-heading" style="font-size: 0.72rem; color: rgba(255,255,255,0.45); padding: 0.75rem 1rem 0.25rem; letter-spacing: 0.5px;">Control Submodules</div>
+
+                    <a href="@Url.Action("Receivables", "Finance")" class="menu-link nav-link @(currentController == "Finance" && currentAction == "Receivables" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-hand-holding-dollar menu-icon me-2"></i>
+                            <span>Receivables</span>
+                        </div>
+                    </a>
+
+                    <a href="@Url.Action("Payables", "Finance")" class="menu-link nav-link @(currentController == "Finance" && currentAction == "Payables" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-money-bill-transfer menu-icon me-2"></i>
+                            <span>Payables</span>
+                        </div>
+                    </a>
+
+                    <a href="@Url.Action("Ledger", "Finance")" class="menu-link nav-link @(currentController == "Finance" && currentAction == "Ledger" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-table-list menu-icon me-2"></i>
+                            <span>General Ledger & JV</span>
+                        </div>
+                    </a>
+
+                    <a href="@Url.Action("Budgets", "Finance")" class="menu-link nav-link @(currentController == "Finance" && currentAction == "Budgets" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-scale-balanced menu-icon me-2"></i>
+                            <span>Budgets & Variances</span>
+                        </div>
+                    </a>
+
+                    <a href="@Url.Action("Taxation", "Finance")" class="menu-link nav-link @(currentController == "Finance" && currentAction == "Taxation" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-stamp menu-icon me-2"></i>
+                            <span>Taxation & Compliance</span>
+                        </div>
+                    </a>
+
+                    <a href="/HRPayroll/StatutoryCompliance" class="menu-link nav-link @(currentController == "HRPayroll" && currentAction == "StatutoryCompliance" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-building-shield menu-icon me-2"></i>
+                            <span>Statutory Compliance (PF/ESI/TDS)</span>
+                        </div>
+                    </a>
+
+                    <a href="@Url.Action("BankRecon", "Finance")" class="menu-link nav-link @(currentController == "Finance" && currentAction == "BankRecon" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-building-columns menu-icon me-2"></i>
+                            <span>Bank Reconciliation</span>
+                        </div>
+                    </a>
+
+                    <a href="@Url.Action("FixedAssets", "Finance")" class="menu-link nav-link @(currentController == "Finance" && currentAction == "FixedAssets" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-laptop-file menu-icon me-2"></i>
+                            <span>Fixed Assets & Dep.</span>
+                        </div>
+                    </a>
+
+                    <!-- Team Management (Subordinate Controls) -->
+                    <div class="menu-title font-bold text-uppercase menu-header sidebar-heading" style="font-size: 0.72rem; color: rgba(255,255,255,0.45); padding: 0.75rem 1rem 0.25rem; letter-spacing: 0.5px;">TEAM MANAGEMENT</div>
+
+                    <a href="@Url.Action("TeamAttendance", "Finance")" class="menu-link nav-link @(currentController == "Finance" && currentAction == "TeamAttendance" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-clipboard-user menu-icon me-2"></i>
+                            <span>Team Attendance</span>
+                        </div>
+                    </a>
+
+                    <a href="@Url.Action("Tasks", "Finance")" class="menu-link nav-link @(currentController == "Finance" && (currentAction == "Tasks" || currentAction == "AssignTask") ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-list-check menu-icon me-2"></i>
+                            <span>Task Delegation</span>
+                        </div>
+                    </a>
+
+                    <a href="@Url.Action("Approvals", "Manager")" class="menu-link nav-link @(currentController == "Manager" && currentAction == "Approvals" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-user-check menu-icon me-2"></i>
+                            <span>Team Approvals</span>
+                        </div>
+                    </a>
+
+                    <!-- Personal Self-Service -->
+                    <div class="menu-title font-bold text-uppercase menu-header sidebar-heading" style="font-size: 0.72rem; color: rgba(255,255,255,0.45); padding: 0.75rem 1rem 0.25rem; letter-spacing: 0.5px;">MY SELF-SERVICE</div>
+
+                    <a href="@Url.Action("Index", "EmployeeDashboard")" class="menu-link nav-link @(currentController == "EmployeeDashboard" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-circle-user menu-icon me-2"></i>
+                            <span>My Employee Portal</span>
+                        </div>
+                    </a>
+
+                    <a href="@Url.Action("Index", "ESSAttendance")" class="menu-link nav-link @(currentController == "ESSAttendance" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-fingerprint menu-icon me-2"></i>
+                            <span>My Clock-In / Attendance</span>
+                        </div>
+                    </a>
+
+                    <a href="@Url.Action("Apply", "ESSLeave")" class="menu-link nav-link @(currentController == "ESSLeave" && currentAction == "Apply" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-calendar-minus menu-icon me-2"></i>
+                            <span>Apply Personal Leave</span>
+                        </div>
+                    </a>
+
+                    <a href="@Url.Action("Create", "ESSPurchase")" class="menu-link nav-link @(currentController == "ESSPurchase" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-cart-plus menu-icon me-2"></i>
+                            <span>Request Material / PR</span>
+                        </div>
+                    </a>
+
+                    <a href="@Url.Action("Payslips", "ESSPayDocuments")" class="menu-link nav-link @(currentController == "ESSPayDocuments" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-file-invoice-dollar menu-icon me-2"></i>
+                            <span>My Payslips</span>
+                        </div>
+                    </a>
+                }
+                else if (userRole == "Sales Manager" || User.IsInRole("Sales Manager"))
+                {
+                    <div class="menu-title font-bold text-uppercase menu-header sidebar-heading" style="font-size: 0.72rem; color: rgba(255,255,255,0.45); padding: 0.75rem 1rem 0.25rem; letter-spacing: 0.5px;">SALES & PIPELINE</div>
+
+                    <a href="@Url.Action("Index", "Sales")" class="menu-link nav-link @(currentController == "Sales" && currentAction == "Index" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-chart-line menu-icon me-2"></i>
+                            <span>Sales Command Center</span>
+                        </div>
+                    </a>
+
+                    <a href="@Url.Action("Leads", "Sales")" class="menu-link nav-link @(currentController == "Sales" && currentAction == "Leads" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-funnel-dollar menu-icon me-2"></i>
+                            <span>CRM & Lead Pipeline</span>
+                        </div>
+                    </a>
+
+                    <a href="@Url.Action("Orders", "Sales")" class="menu-link nav-link @(currentController == "Sales" && currentAction == "Orders" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-file-invoice-dollar menu-icon me-2"></i>
+                            <span>Sales Orders</span>
+                        </div>
+                    </a>
+
+                    <div class="menu-title font-bold text-uppercase menu-header sidebar-heading" style="font-size: 0.72rem; color: rgba(255,255,255,0.45); padding: 0.75rem 1rem 0.25rem; letter-spacing: 0.5px;">TEAM MANAGEMENT</div>
+
+                    <a href="@Url.Action("TeamAttendance", "Sales")" class="menu-link nav-link @(currentController == "Sales" && currentAction == "TeamAttendance" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-users-gear menu-icon me-2"></i>
+                            <span>Sales Team Radar</span>
+                        </div>
+                    </a>
+
+                    <a href="@Url.Action("Tasks", "Sales")" class="menu-link nav-link @(currentController == "Sales" && (currentAction == "Tasks" || currentAction == "AssignTask") ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-list-check menu-icon me-2"></i>
+                            <span>Target Delegation</span>
+                        </div>
+                    </a>
+
+                    <a href="@Url.Action("Approvals", "Manager")" class="menu-link nav-link @(currentController == "Manager" && currentAction == "Approvals" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-user-check menu-icon me-2"></i>
+                            <span>Team Approvals</span>
+                        </div>
+                    </a>
+
+                    <div class="menu-title font-bold text-uppercase menu-header sidebar-heading" style="font-size: 0.72rem; color: rgba(255,255,255,0.45); padding: 0.75rem 1rem 0.25rem; letter-spacing: 0.5px;">MY SELF-SERVICE</div>
+
+                    <a href="@Url.Action("Index", "EmployeeDashboard")" class="menu-link nav-link @(currentController == "EmployeeDashboard" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-circle-user menu-icon me-2"></i>
+                            <span>My Employee Portal</span>
+                        </div>
+                    </a>
+
+                    <a href="@Url.Action("ClockInOut", "ESSAttendance")" class="menu-link nav-link @(currentController == "ESSAttendance" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-fingerprint menu-icon me-2"></i>
+                            <span>My Clock-In / Out</span>
+                        </div>
+                    </a>
+
+                    <a href="@Url.Action("Apply", "ESSLeave")" class="menu-link nav-link @(currentController == "ESSLeave" && currentAction == "Apply" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-calendar-minus menu-icon me-2"></i>
+                            <span>Apply Personal Leave</span>
+                        </div>
+                    </a>
+
+                    <a href="@Url.Action("Create", "ESSPurchase")" class="menu-link nav-link @(currentController == "ESSPurchase" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-cart-plus menu-icon me-2"></i>
+                            <span>Request Material / PR</span>
+                        </div>
+                    </a>
+                }
+                else if (userRole == "Admin" || userRole == "Super Admin")
+                {
+                    var isDashboardActive = currentController == "Dashboard";
+
+                    <div class="menu-title font-bold text-uppercase" style="font-size: 0.7rem; color: rgba(255,255,255,0.45); padding: 0.75rem 1rem 0.25rem; letter-spacing: 0.5px;">Admin Management</div>
+                    <a href="/Dashboard" class="menu-link @(isDashboardActive ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-gauge menu-icon"></i>
+                            <span>Admin Dashboard</span>
+                        </div>
+                    </a>
+
+                    <div class="menu-title font-bold text-uppercase" style="font-size: 0.7rem; color: rgba(255,255,255,0.45); padding: 0.75rem 1rem 0.25rem; letter-spacing: 0.5px;">User Management</div>
+                    <a href="/AdminUser/Directory" class="menu-link @(currentController == "AdminUser" && currentAction == "Directory" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-users menu-icon"></i>
+                            <span>User Directory</span>
+                        </div>
+                    </a>
+                    <a href="/AdminUser/AddEdit" class="menu-link @(currentController == "AdminUser" && currentAction == "AddEdit" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-user-plus menu-icon"></i>
+                            <span>Add / Edit Users</span>
+                        </div>
+                    </a>
+                    <a href="/AdminUser/PasswordResets" class="menu-link @(currentController == "AdminUser" && currentAction == "PasswordResets" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-key menu-icon"></i>
+                            <span>Password Reset Requests</span>
+                        </div>
+                    </a>
+                    <a href="/AdminUser/Locks" class="menu-link @(currentController == "AdminUser" && currentAction == "Locks" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-user-lock menu-icon"></i>
+                            <span>Account Lock / Unlock</span>
+                        </div>
+                    </a>
+                    <a href="/RolePermissions" class="menu-link @(currentController == "RolePermissions" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-shield-halved menu-icon"></i>
+                            <span>Roles & Permission Matrix (RBAC)</span>
+                        </div>
+                    </a>
+
+                    <div class="menu-title font-bold text-uppercase" style="font-size: 0.7rem; color: rgba(255,255,255,0.45); padding: 0.75rem 1rem 0.25rem; letter-spacing: 0.5px;">Master Data Setup</div>
+                    <a href="/AdminMaster/Currency" class="menu-link @(currentController == "AdminMaster" && currentAction == "Currency" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-coins menu-icon"></i>
+                            <span>Currency Master & Rates</span>
+                        </div>
+                    </a>
+                    <a href="/AdminMaster/Tax" class="menu-link @(currentController == "AdminMaster" && currentAction == "Tax" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-percent menu-icon"></i>
+                            <span>Tax Slabs & GST / VAT</span>
+                        </div>
+                    </a>
+                    <a href="/BankMaster" class="menu-link @(currentController == "BankMaster" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-building-columns menu-icon"></i>
+                            <span>Company Bank Master</span>
+                        </div>
+                    </a>
+                    <a href="/ProcurementCatalog" class="menu-link @(currentController == "ProcurementCatalog" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-boxes-stacked menu-icon"></i>
+                            <span>Procurement Catalog Master</span>
+                        </div>
+                    </a>
+                    <a href="/AdminMaster/Departments" class="menu-link @(currentController == "AdminMaster" && currentAction == "Departments" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-sitemap menu-icon"></i>
+                            <span>Department Master</span>
+                        </div>
+                    </a>
+                    <a href="/AdminMaster/Designations" class="menu-link @(currentController == "AdminMaster" && currentAction == "Designations" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-id-card menu-icon"></i>
+                            <span>Designation Master</span>
+                        </div>
+                    </a>
+                    <a href="/HRLeave/Policy" class="menu-link @(currentController == "HRLeave" && currentAction == "Policy" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-file-invoice menu-icon"></i>
+                            <span>Leave Policy & Types</span>
+                        </div>
+                    </a>
+                    <a href="/HRLeave/HolidayList" class="menu-link @((currentController == "HRLeave" && currentAction == "HolidayList") || (currentController == "AdminMaster" && currentAction == "Holidays") ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-calendar-days menu-icon"></i>
+                            <span>Company Holiday Calendar</span>
+                        </div>
+                    </a>
+                    <a href="/HRPayroll/StatutoryCompliance" class="menu-link @(currentController == "HRPayroll" && currentAction == "StatutoryCompliance" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-building-shield menu-icon"></i>
+                            <span>Statutory Compliance (PF/ESI/TDS)</span>
+                        </div>
+                    </a>
+
+                    <div class="menu-title font-bold text-uppercase" style="font-size: 0.7rem; color: rgba(255,255,255,0.45); padding: 0.75rem 1rem 0.25rem; letter-spacing: 0.5px;">Branch Operations</div>
+                    <a href="/AdminBranch/Details" class="menu-link @(currentController == "AdminBranch" && currentAction == "Details" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-code-branch menu-icon"></i>
+                            <span>Branch Details</span>
+                        </div>
+                    </a>
+                    <a href="/AdminBranch/Hours" class="menu-link @(currentController == "AdminBranch" && currentAction == "Hours" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-clock menu-icon"></i>
+                            <span>Branch Working Hours</span>
+                        </div>
+                    </a>
+                    <a href="/AdminBranch/Regional" class="menu-link @(currentController == "AdminBranch" && currentAction == "Regional" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-globe menu-icon"></i>
+                            <span>Regional Settings</span>
+                        </div>
+                    </a>
+
+                    <div class="menu-title font-bold text-uppercase" style="font-size: 0.7rem; color: rgba(255,255,255,0.45); padding: 0.75rem 1rem 0.25rem; letter-spacing: 0.5px;">Data Operations</div>
+                    <a href="/AdminData/Import" class="menu-link @(currentController == "AdminData" && currentAction == "Import" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-file-import menu-icon"></i>
+                            <span>Bulk Data Import (Excel / CSV)</span>
+                        </div>
+                    </a>
+                    <a href="/AdminData/Export" class="menu-link @(currentController == "AdminData" && currentAction == "Export" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-file-export menu-icon"></i>
+                            <span>Master Data Export</span>
+                        </div>
+                    </a>
+                    <a href="/AdminData/BackupHistory" class="menu-link @(currentController == "AdminData" && currentAction == "BackupHistory" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-database menu-icon"></i>
+                            <span>Data Backup History</span>
+                        </div>
+                    </a>
+
+                    <div class="menu-title font-bold text-uppercase" style="font-size: 0.7rem; color: rgba(255,255,255,0.45); padding: 0.75rem 1rem 0.25rem; letter-spacing: 0.5px;">Admin Reports</div>
+                    <a href="/AdminReports/UserActivity" class="menu-link @(currentController == "AdminReports" && currentAction == "UserActivity" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-file-invoice menu-icon"></i>
+                            <span>User Activity Report</span>
+                        </div>
+                    </a>
+                    <a href="/AdminReports/LoginAudit" class="menu-link @(currentController == "AdminReports" && currentAction == "LoginAudit" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-user-shield menu-icon"></i>
+                            <span>Login Audit Report</span>
+                        </div>
+                    </a>
+                    <a href="/AdminReports/BranchSummary" class="menu-link @(currentController == "AdminReports" && currentAction == "BranchSummary" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-chart-column menu-icon"></i>
+                            <span>Branch Summary Report</span>
+                        </div>
+                    </a>
+
+                    <div class="menu-title font-bold text-uppercase" style="font-size: 0.7rem; color: rgba(255,255,255,0.45); padding: 0.75rem 1rem 0.25rem; letter-spacing: 0.5px;">Internal Announcements</div>
+                    <a href="/AdminAnnouncements/Index" class="menu-link @(currentController == "AdminAnnouncements" && currentAction == "Index" ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-bullhorn menu-icon"></i>
+                            <span>Announcements Billboard</span>
+                        </div>
+                    </a>
+
+                    @if (User.IsInRole("Purchase Manager") || User.IsInRole("Super Admin") || User.IsInRole("Admin"))
+                    {
+                        <div class="sidebar-heading text-uppercase text-muted px-3 mt-3 mb-1" style="font-size: 0.72rem;">
+                            PROCUREMENT & PURCHASE
+                        </div>
+                        <ul class="nav flex-column mb-2">
+                            <li class="nav-item">
+                                <a class="nav-link @(currentController == "Purchase" && currentAction == "Index" ? "active" : "")" href="@Url.Action("Index", "Purchase")"><i class="fa fa-shopping-cart me-2"></i> Purchase Dashboard</a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link @(currentController == "Purchase" && currentAction == "Requisitions" ? "active" : "")" href="@Url.Action("Requisitions", "Purchase")"><i class="fa fa-clipboard-list me-2"></i> Requisitions (PR)</a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link @(currentController == "Purchase" && currentAction == "Orders" ? "active" : "")" href="@Url.Action("Orders", "Purchase")"><i class="fa fa-file-invoice me-2"></i> Purchase Orders (PO)</a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link @(currentController == "Purchase" && currentAction == "Vendors" ? "active" : "")" href="@Url.Action("Vendors", "Purchase")"><i class="fa fa-handshake me-2"></i> Vendor Directory</a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link @(currentController == "Purchase" && currentAction == "Receipts" ? "active" : "")" href="@Url.Action("Receipts", "Purchase")"><i class="fa fa-boxes me-2"></i> Goods Receipts (GRN)</a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link @(currentController == "ProcurementCatalog" ? "active" : "")" href="@Url.Action("Index", "ProcurementCatalog")"><i class="fa fa-boxes-stacked me-2"></i> Catalog Master</a>
+                            </li>
+                        </ul>
+                    }
+                }
+                else if (userRole == "Purchase Manager")
+                {
+                    <div class="sidebar-heading text-uppercase text-muted px-3 mt-3 mb-1" style="font-size: 0.72rem;">
+                        PROCUREMENT & PURCHASE
+                    </div>
+                    <ul class="nav flex-column mb-2">
+                        <li class="nav-item">
+                            <a class="nav-link @(currentController == "Purchase" && currentAction == "Index" ? "active" : "")" href="@Url.Action("Index", "Purchase")"><i class="fa fa-shopping-cart me-2"></i> Purchase Dashboard</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link @(currentController == "Purchase" && currentAction == "Requisitions" ? "active" : "")" href="@Url.Action("Requisitions", "Purchase")"><i class="fa fa-clipboard-list me-2"></i> Requisitions (PR)</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link @(currentController == "Purchase" && currentAction == "Orders" ? "active" : "")" href="@Url.Action("Orders", "Purchase")"><i class="fa fa-file-invoice me-2"></i> Purchase Orders (PO)</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link @(currentController == "Purchase" && currentAction == "Vendors" ? "active" : "")" href="@Url.Action("Vendors", "Purchase")"><i class="fa fa-handshake me-2"></i> Vendor Directory</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link @(currentController == "Purchase" && currentAction == "Receipts" ? "active" : "")" href="@Url.Action("Receipts", "Purchase")"><i class="fa fa-boxes me-2"></i> Goods Receipts (GRN)</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link @(currentController == "ProcurementCatalog" ? "active" : "")" href="@Url.Action("Index", "ProcurementCatalog")"><i class="fa fa-boxes-stacked me-2"></i> Catalog Master</a>
+                        </li>
+                    </ul>
+
+                    <!-- Personal Self Service for Purchase Manager -->
+                    <div class="sidebar-heading text-uppercase text-muted px-3 mt-3 mb-1" style="font-size: 0.72rem;">
+                        MY SELF-SERVICE
+                    </div>
+                    <ul class="nav flex-column mb-2">
+                        <li class="nav-item">
+                            <a class="nav-link @(currentController == "EmployeeDashboard" ? "active" : "")" href="@Url.Action("Index", "EmployeeDashboard")"><i class="fa fa-user-circle me-2"></i> My Employee Portal</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link @(currentController == "ESSAttendance" ? "active" : "")" href="@Url.Action("Index", "ESSAttendance")"><i class="fa fa-fingerprint me-2"></i> My Attendance</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link @(currentController == "ESSPurchase" ? "active" : "")" href="@Url.Action("Create", "ESSPurchase")"><i class="fa fa-cart-plus me-2"></i> Request Material / PR</a>
+                        </li>
+                    </ul>
+                }
+                else
+                {
+                    var dashboardUrl = userRole == "Employee" ? "/EmployeeDashboard" : "/Dashboard";
+                    var isDashboardActive = currentController == "Dashboard" || currentController == "EmployeeDashboard";
+
+                    <a href="@dashboardUrl" class="menu-link @(isDashboardActive ? "active" : "")">
+                        <div>
+                            <i class="fa-solid fa-gauge menu-icon"></i>
+                            <span>Dashboard</span>
+                        </div>
+                    </a>
+
+                    @if (userRole == "Admin")
+                    {
+                        <div class="menu-title">User Setting</div>
+                        <a href="/Roles" class="menu-link @(currentController == "Roles" ? "active" : "")">
+                            <div>
+                                <i class="fa-solid fa-user-shield menu-icon"></i>
+                                <span>User Types</span>
+                            </div>
+                            <i class="fa-solid fa-chevron-right small text-muted" style="font-size: 0.6rem;"></i>
+                        </a>
+                    }
+
+                    @if (showUserMgmt)
+                    {
+                        <a href="/Roles" class="menu-link @(currentController == "Users" ? "active" : "")">
+                            <div>
+                                <i class="fa-solid fa-users menu-icon"></i>
+                                <span>User Types</span>
+                            </div>
+                            <i class="fa-solid fa-chevron-right small text-muted" style="font-size: 0.6rem;"></i>
+                        </a>
+
+                        <div class="menu-title">System Settings</div>
+                        <a href="/Settings" class="menu-link @(currentController == "Settings" ? "active" : "")">
+                            <div>
+                                <i class="fa-solid fa-sliders menu-icon"></i>
+                                <span>Settings</span>
+                            </div>
+                            <i class="fa-solid fa-chevron-right small text-muted" style="font-size: 0.6rem;"></i>
+                        </a>
+                    }
+
+                    @if (showCompany)
+                    {
+                        <a href="#" class="menu-link">
+                            <div>
+                                <i class="fa-solid fa-building menu-icon"></i>
+                                <span>Company</span>
+                            </div>
+                            <i class="fa-solid fa-chevron-right small text-muted" style="font-size: 0.6rem;"></i>
+                        </a>
+                    }
+
+                    <div class="menu-title">Modules</div>
+
+                    @if (showUserMgmt)
+                    {
+                        <a href="/UserAccounts" class="menu-link @(currentController == "UserAccounts" ? "active" : "")">
+                            <div>
+                                <i class="fa-solid fa-users-gear menu-icon"></i>
+                                <span>User Management</span>
+                            </div>
+                            <i class="fa-solid fa-chevron-right small text-muted" style="font-size: 0.6rem;"></i>
+                        </a>
+                        @if (userRole == "Super Admin" || userRole == "Admin")
+                        {
+                            <a href="/RolePermissions" class="menu-link @(currentController == "RolePermissions" ? "active" : "")">
+                                <div>
+                                    <i class="fa-solid fa-user-shield menu-icon"></i>
+                                    <span>Page Permissions</span>
+                                </div>
+                                <i class="fa-solid fa-chevron-right small text-muted" style="font-size: 0.6rem;"></i>
+                            </a>
+                        }
+                    }
+
+                    @if (showCompany)
+                    {
+                        <a href="/Company" class="menu-link @(currentController == "Company" ? "active" : "")">
+                            <div>
+                                <i class="fa-solid fa-building menu-icon"></i>
+                                <span>Company</span>
+                            </div>
+                            <i class="fa-solid fa-chevron-right small text-muted" style="font-size: 0.6rem;"></i>
+                        </a>
+                    }
+
+                    @if (showBranchMgmt)
+                    {
+                        <a href="/Branches" class="menu-link @(currentController == "Branches" ? "active" : "")">
+                            <div>
+                                <i class="fa-solid fa-code-fork menu-icon"></i>
+                                <span>Branch Management</span>
+                            </div>
+                            <i class="fa-solid fa-chevron-right small text-muted" style="font-size: 0.6rem;"></i>
+                        </a>
+                    }
+
+                    @if (showEmployeeMgmt)
+                    {
+                        <a href="/EmployeeManagement" class="menu-link @(currentController == "EmployeeManagement" ? "active" : "")">
+                            <div>
+                                <i class="fa-solid fa-id-card menu-icon"></i>
+                                <span>Employee Management</span>
+                            </div>
+                            <i class="fa-solid fa-chevron-right small text-muted" style="font-size: 0.6rem;"></i>
+                        </a>
+                    }
+
+                    @if (showCustomerMgmt)
+                    {
+                        <a href="/Customers" class="menu-link @(currentController == "Customers" ? "active" : "")">
+                            <div>
+                                <i class="fa-solid fa-handshake menu-icon"></i>
+                                <span>Customer Management</span>
+                            </div>
+                            <i class="fa-solid fa-chevron-right small text-muted" style="font-size: 0.6rem;"></i>
+                        </a>
+                    }
+
+                    @if (showSupplierMgmt)
+                    {
+                        <a href="/Suppliers" class="menu-link @(currentController == "Suppliers" ? "active" : "")">
+                            <div>
+                                <i class="fa-solid fa-truck menu-icon"></i>
+                                <span>Supplier Management</span>
+                            </div>
+                            <i class="fa-solid fa-chevron-right small text-muted" style="font-size: 0.6rem;"></i>
+                        </a>
+                    }
+
+                    @if (showProductMgmt)
+                    {
+                        <a href="/Products" class="menu-link @(currentController == "Products" ? "active" : "")">
+                            <div>
+                                <i class="fa-solid fa-box-open menu-icon"></i>
+                                <span>Product Management</span>
+                            </div>
+                            <i class="fa-solid fa-chevron-right small text-muted" style="font-size: 0.6rem;"></i>
+                        </a>
+                    }
+
+                    @if (showInventoryMgmt)
+                    {
+                        <a href="/Inventory" class="menu-link @(currentController == "Inventory" ? "active" : "")">
+                            <div>
+                                <i class="fa-solid fa-boxes-stacked menu-icon"></i>
+                                <span>Inventory Management</span>
+                            </div>
+                            <i class="fa-solid fa-chevron-right small text-muted" style="font-size: 0.6rem;"></i>
+                        </a>
+                    }
+
+                    @if (showPurchaseMgmt)
+                    {
+                        <a href="/Purchase" class="menu-link @(currentController == "Purchase" ? "active" : "")">
+                            <div>
+                                <i class="fa-solid fa-cart-shopping menu-icon"></i>
+                                <span>Purchase Management</span>
+                            </div>
+                            <i class="fa-solid fa-chevron-right small text-muted" style="font-size: 0.6rem;"></i>
+                        </a>
+                    }
+
+                    @if (showSalesMgmt)
+                    {
+                        var isSalesMenuExpanded = currentController == "Sales" || currentController == "SalesTeam" || currentController == "SalesManagement" || currentController == "SalesReports" || currentController == "ProductSettings" || currentController == "SalesDashboard";
+                        <div class="menu-item-dropdown">
+                            <a class="menu-link @(isSalesMenuExpanded ? "active" : "")"
+                               data-bs-toggle="collapse" href="#salesSubMenu" role="button" aria-expanded="@(isSalesMenuExpanded ? "true" : "false")" aria-controls="salesSubMenu">
+                                <div>
+                                    <i class="fa-solid fa-file-invoice-dollar menu-icon"></i>
+                                    <span>Sales Management</span>
+                                </div>
+                                <i class="fa-solid fa-chevron-right dropdown-toggle-arrow small text-muted" style="font-size: 0.6rem;"></i>
+                            </a>
+                            <div class="collapse sidebar-submenu @(isSalesMenuExpanded ? "show" : "")" id="salesSubMenu">
+                                @{
+                                    var salesDashUrl = userRole == "Sales Manager" ? "/SalesManagerDashboard" : "/SalesDashboard";
+                                    var isSalesDashActive = currentController == "SalesDashboard" || currentController == "SalesManagerDashboard";
+                                }
+                                <a href="@salesDashUrl" class="submenu-link @(isSalesDashActive ? "active" : "")">
+                                    <i class="fa-solid fa-gauge me-2"></i> Sales Dashboard
+                                </a>
+
+                                @if (userRole != "Sales Executive")
+                                {
+                                    var isSalesTeamExpanded = currentController == "SalesTeam";
+                                    <a class="submenu-link @(isSalesTeamExpanded ? "active" : "")" data-bs-toggle="collapse" href="#salesTeamSub" role="button" aria-expanded="@(isSalesTeamExpanded ? "true" : "false")" aria-controls="salesTeamSub">
+                                        <i class="fa-solid fa-users-rectangle me-2"></i> Sales Team <i class="fa-solid fa-chevron-right dropdown-toggle-arrow float-end mt-1" style="font-size: 0.5rem;"></i>
+                                    </a>
+                                    <div class="collapse @(isSalesTeamExpanded ? "show" : "") ps-2" id="salesTeamSub" style="background-color: rgba(0,0,0,0.1);">
+                                        <a href="/SalesTeam/Executives" class="submenu-link @(currentController == "SalesTeam" && currentAction == "Executives" ? "active" : "")">Sales Executives</a>
+                                        <a href="/SalesTeam/Coordinators" class="submenu-link @(currentController == "SalesTeam" && currentAction == "Coordinators" ? "active" : "")">Sales Coordinators</a>
+                                        <a href="/SalesTeam/Targets" class="submenu-link @(currentController == "SalesTeam" && currentAction == "Targets" ? "active" : "")">Sales Targets</a>
+                                        <a href="/SalesTeam/Performance" class="submenu-link @(currentController == "SalesTeam" && currentAction == "Performance" ? "active" : "")">Sales Performance</a>
+                                    </div>
+                                }
+
+                                <a href="/Customers" class="submenu-link @(currentController == "Customers" ? "active" : "")">
+                                    <i class="fa-solid fa-handshake me-2"></i> Customers
+                                </a>
+                                <a href="/SalesManagement/Leads" class="submenu-link @(currentController == "SalesManagement" && currentAction == "Leads" ? "active" : "")">
+                                    <i class="fa-solid fa-filter me-2"></i> Leads
+                                </a>
+                                <a href="/SalesManagement/Quotations" class="submenu-link @(currentController == "SalesManagement" && currentAction == "Quotations" ? "active" : "")">
+                                    <i class="fa-solid fa-file-signature me-2"></i> Quotations
+                                </a>
+                                <a href="/SalesManagement/Orders" class="submenu-link @(currentController == "SalesManagement" && currentAction == "Orders" ? "active" : "")">
+                                    <i class="fa-solid fa-folder-open me-2"></i> Sales Orders
+                                </a>
+                                <a href="/SalesManagement/Invoices" class="submenu-link @(currentController == "SalesManagement" && currentAction == "Invoices" ? "active" : "")">
+                                    <i class="fa-solid fa-file-invoice me-2"></i> Sales Invoices
+                                </a>
+                                <a href="/SalesManagement/Returns" class="submenu-link @(currentController == "SalesManagement" && currentAction == "Returns" ? "active" : "")">
+                                    <i class="fa-solid fa-arrow-rotate-left me-2"></i> Sales Returns
+                                </a>
+                                <a href="/SalesManagement/Receivables" class="submenu-link @(currentController == "SalesManagement" && currentAction == "Receivables" ? "active" : "")">
+                                    <i class="fa-solid fa-money-bill-trend-up me-2"></i> Payments / Receivables
+                                </a>
+
+                                @if (userRole != "Sales Executive")
+                                {
+                                    var isProdSettingsExpanded = currentController == "ProductSettings" || currentController == "Products";
+                                    <a class="submenu-link @(isProdSettingsExpanded ? "active" : "")" data-bs-toggle="collapse" href="#prodMgmtSub" role="button" aria-expanded="@(isProdSettingsExpanded ? "true" : "false")" aria-controls="prodMgmtSub">
+                                        <i class="fa-solid fa-box-open me-2"></i> Product Management <i class="fa-solid fa-chevron-right dropdown-toggle-arrow float-end mt-1" style="font-size: 0.5rem;"></i>
+                                    </a>
+                                    <div class="collapse @(isProdSettingsExpanded ? "show" : "") ps-2" id="prodMgmtSub" style="background-color: rgba(0,0,0,0.1);">
+                                        <a href="/Products" class="submenu-link @(currentController == "Products" && currentAction == "Index" ? "active" : "")">Products</a>
+                                        <a href="/ProductSettings/Categories" class="submenu-link @(currentController == "ProductSettings" && currentAction == "Categories" ? "active" : "")">Categories</a>
+                                        <a href="/ProductSettings/Brands" class="submenu-link @(currentController == "ProductSettings" && currentAction == "Brands" ? "active" : "")">Brands</a>
+                                        <a href="/ProductSettings/Units" class="submenu-link @(currentController == "ProductSettings" && currentAction == "Units" ? "active" : "")">Units</a>
+                                        <a href="/ProductSettings/Variants" class="submenu-link @(currentController == "ProductSettings" && currentAction == "Variants" ? "active" : "")">Variants</a>
+                                        <a href="/ProductSettings/PriceLists" class="submenu-link @(currentController == "ProductSettings" && currentAction == "PriceLists" ? "active" : "")">Price Lists</a>
+                                        <a href="/ProductSettings/Barcodes" class="submenu-link @(currentController == "ProductSettings" && currentAction == "Barcodes" ? "active" : "")">Product Barcodes</a>
+                                    </div>
+                                }
+
+                                @if (userRole != "Sales Executive")
+                                {
+                                    var isSalesReportsExpanded = currentController == "SalesReports";
+                                    <a class="submenu-link @(isSalesReportsExpanded ? "active" : "")" data-bs-toggle="collapse" href="#salesReportsSub" role="button" aria-expanded="@(isSalesReportsExpanded ? "true" : "false")" aria-controls="salesReportsSub">
+                                        <i class="fa-solid fa-chart-pie me-2"></i> Sales Reports <i class="fa-solid fa-chevron-right dropdown-toggle-arrow float-end mt-1" style="font-size: 0.5rem;"></i>
+                                    </a>
+                                    <div class="collapse @(isSalesReportsExpanded ? "show" : "") ps-2" id="salesReportsSub" style="background-color: rgba(0,0,0,0.1);">
+                                        <a href="/SalesReports/Summary" class="submenu-link @(currentController == "SalesReports" && currentAction == "Summary" ? "active" : "")">Sales Summary</a>
+                                        <a href="/SalesReports/ByCustomer" class="submenu-link @(currentController == "SalesReports" && currentAction == "ByCustomer" ? "active" : "")">Sales by Customer</a>
+                                        <a href="/SalesReports/ByProduct" class="submenu-link @(currentController == "SalesReports" && currentAction == "ByProduct" ? "active" : "")">Sales by Product</a>
+                                        <a href="/SalesReports/BySalesperson" class="submenu-link @(currentController == "SalesReports" && currentAction == "BySalesperson" ? "active" : "")">Sales by Salesperson</a>
+                                        <a href="/SalesReports/TargetReport" class="submenu-link @(currentController == "SalesReports" && currentAction == "TargetReport" ? "active" : "")">Sales Target Report</a>
+                                        <a href="/SalesReports/ReceivablesReport" class="submenu-link @(currentController == "SalesReports" && currentAction == "ReceivablesReport" ? "active" : "")">Receivables Report</a>
+                                    </div>
+                                }
+
+                                <a href="/Notifications" class="submenu-link @(currentController == "Notifications" ? "active" : "")">
+                                    <i class="fa-solid fa-bell me-2"></i> Notifications
+                                </a>
+                            </div>
+                        </div>
+                    }
+
+                    @if (showExpenseMgmt)
+                    {
+                        <a href="/Expense" class="menu-link @(currentController == "Expense" ? "active" : "")">
+                            <div>
+                                <i class="fa-solid fa-receipt menu-icon"></i>
+                                <span>Expense Management</span>
+                            </div>
+                            <i class="fa-solid fa-chevron-right small text-muted" style="font-size: 0.6rem;"></i>
+                        </a>
+                    }
+
+                    @if (showAccounting)
+                    {
+                        <a href="/Accounts" class="menu-link @(currentController == "Accounts" ? "active" : "")">
+                            <div>
+                                <i class="fa-solid fa-coins menu-icon"></i>
+                                <span>Accounting</span>
+                            </div>
+                            <i class="fa-solid fa-chevron-right small text-muted" style="font-size: 0.6rem;"></i>
+                        </a>
+                    }
+
+                    @if (showHRMgmt)
+                    {
+                        <a href="/HR" class="menu-link @(currentController == "HR" ? "active" : "")">
+                            <div>
+                                <i class="fa-solid fa-user-tie menu-icon"></i>
+                                <span>HR Management</span>
+                            </div>
+                            <i class="fa-solid fa-chevron-right small text-muted" style="font-size: 0.6rem;"></i>
+                        </a>
+                    }
+
+                    @if (showReports)
+                    {
+                        <a href="/Reports" class="menu-link @(currentController == "Reports" ? "active" : "")">
+                            <div>
+                                <i class="fa-solid fa-chart-column menu-icon"></i>
+                                <span>Reports</span>
+                            </div>
+                            <i class="fa-solid fa-chevron-right small text-muted" style="font-size: 0.6rem;"></i>
+                        </a>
+                    }
+
+                    @if (userRole == "Super Admin" || userRole == "HR" || userRole == "Accountant")
+                    {
+                        <a href="/Payroll" class="menu-link @(currentController == "Payroll" ? "active" : "")">
+                            <div>
+                                <i class="fa-solid fa-money-check-dollar menu-icon"></i>
+                                <span>Payroll Management</span>
+                            </div>
+                            <i class="fa-solid fa-chevron-right small text-muted" style="font-size: 0.6rem;"></i>
+                        </a>
+                    }
+
+                    @if (showSettings)
+                    {
+                        <a href="/Settings" class="menu-link @(currentController == "Settings" ? "active" : "")">
+                            <div>
+                                <i class="fa-solid fa-sliders menu-icon"></i>
+                                <span>Settings</span>
+                            </div>
+                            <i class="fa-solid fa-chevron-right small text-muted" style="font-size: 0.6rem;"></i>
+                        </a>
+                    }
+                }
+            </div>
+
+            <div class="sidebar-footer">
+                <span>&copy; 2026 ERP System</span>
+                <span>v1.0.0</span>
+            </div>
+        </nav>
+
+        <!-- Right Hand Content Page -->
+        <div id="content">
+            <!-- Topbar Header -->
+            <header class="topbar">
+                <div class="d-flex align-items-center gap-3">
+                    <button class="toggle-btn" onclick="toggleSidebar()"><i class="fa-solid fa-bars"></i></button>
+                    @if (userRole == "Super Admin" || userRole == "Admin")
+                    {
+                        <div class="dropdown d-inline-block">
+                            <button class="btn btn-link p-1 text-secondary" id="waffleMenuBtn" data-bs-toggle="dropdown" aria-expanded="false" title="App Launcher" style="box-shadow: none;">
+                                <i class="fa-solid fa-table-cells fa-lg"></i>
+                            </button>
+                            <ul class="dropdown-menu dropdown-menu-start shadow border-0 mt-2 p-3" aria-labelledby="waffleMenuBtn" style="min-width: 320px; border-radius: 12px; border: 1px solid rgba(0,0,0,0.08) !important; z-index: 1050;">
+                                <li><h6 class="dropdown-header text-uppercase fw-bold text-primary mb-2 ps-2" style="font-size:0.75rem; letter-spacing:0.5px;">ERP Applications</h6></li>
+                                <li>
+                                    <div class="row g-2">
+                                        <div class="col-4 text-center">
+                                            <a href="/HR" class="d-block py-2 text-decoration-none text-dark rounded hover-waffle-item">
+                                                <i class="fa-solid fa-users-gear text-info d-block fs-4 mb-1"></i>
+                                                <span style="font-size:0.7rem; font-weight:600; display:block;">HRMS</span>
+                                            </a>
+                                        </div>
+                                        <div class="col-4 text-center">
+                                            <a href="/InventoryDashboard" class="d-block py-2 text-decoration-none text-dark rounded hover-waffle-item">
+                                                <i class="fa-solid fa-boxes-stacked text-warning d-block fs-4 mb-1"></i>
+                                                <span style="font-size:0.7rem; font-weight:600; display:block;">Inventory</span>
+                                            </a>
+                                        </div>
+                                        <div class="col-4 text-center">
+                                            <a href="/AccountsDashboard" class="d-block py-2 text-decoration-none text-dark rounded hover-waffle-item">
+                                                <i class="fa-solid fa-calculator text-success d-block fs-4 mb-1"></i>
+                                                <span style="font-size:0.7rem; font-weight:600; display:block;">Accounting</span>
+                                            </a>
+                                        </div>
+                                        <div class="col-4 text-center">
+                                            <a href="/Purchase" class="d-block py-2 text-decoration-none text-dark rounded hover-waffle-item">
+                                                <i class="fa-solid fa-cart-shopping text-danger d-block fs-4 mb-1"></i>
+                                                <span style="font-size:0.7rem; font-weight:600; display:block;">Procurement</span>
+                                            </a>
+                                        </div>
+                                        <div class="col-4 text-center">
+                                            <a href="/Sales" class="d-block py-2 text-decoration-none text-dark rounded hover-waffle-item">
+                                                <i class="fa-solid fa-chart-line text-primary d-block fs-4 mb-1"></i>
+                                                <span style="font-size:0.7rem; font-weight:600; display:block;">Sales & CRM</span>
+                                            </a>
+                                        </div>
+                                        <div class="col-4 text-center">
+                                            <a href="/Auditor" class="d-block py-2 text-decoration-none text-dark rounded hover-waffle-item">
+                                                <i class="fa-solid fa-file-shield text-secondary d-block fs-4 mb-1"></i>
+                                                <span style="font-size:0.7rem; font-weight:600; display:block;">Auditor</span>
+                                            </a>
+                                        </div>
+                                    </div>
+                                </li>
+                            </ul>
+                        </div>
+                    }
+                    <div class="search-box d-none d-md-block">
+                        <i class="fa-solid fa-magnifying-glass"></i>
+                        <input type="text" placeholder="Search operational databases..." />
+                    </div>
+                </div>
+
+                @if (userRole == "Super Admin" || userRole == "Admin")
+                {
+                    var activeCompanies = _switcherContext.Companies.Where(c => c.IsActive).ToList();
+                    var activeBranches = _switcherContext.Branches.Where(b => b.IsActive).ToList();
+
+                    int currCompanyId = 1;
+                    int currBranchId = 3;
+
+                    var userCompanyClaim = User.FindFirst("Company")?.Value;
+                    if (int.TryParse(userCompanyClaim, out int userCompId)) currCompanyId = userCompId;
+
+                    if (Context.Request.Cookies.TryGetValue("ActiveCompanyId", out string? cookieCId) && int.TryParse(cookieCId, out int ccId)) currCompanyId = ccId;
+                    if (Context.Request.Cookies.TryGetValue("ActiveBranchId", out string? cookieBId) && int.TryParse(cookieBId, out int cbId)) currBranchId = cbId;
+
+                    var filteredBranches = activeBranches.Where(b => b.CompanyId == currCompanyId).ToList();
+
+                    <form asp-controller="Dashboard" asp-action="SwitchContext" method="post" class="d-none d-lg-flex align-items-center gap-2 me-3" id="switcherForm">
+                        @Html.AntiForgeryToken()
+
+                        <div class="d-flex align-items-center gap-1">
+                            <span class="small fw-bold text-secondary text-uppercase" style="font-size:0.7rem; letter-spacing:0.5px;">Company:</span>
+                            <select name="companyId" class="form-select form-select-sm" style="border-radius:6px; font-size:0.8rem; font-weight:600; padding:0.25rem 1.5rem 0.25rem 0.5rem; background-color:#faf8f5; border-color:#d4cbbd; color:var(--text-color); cursor:pointer;" onchange="updateSwitcherBranches();">
+                                @foreach (var c in activeCompanies)
+                                {
+                                    <!option value="@c.CompanyId" @(c.CompanyId == currCompanyId ? "selected" : "")>@c.CompanyName</!option>
+                                }
+                            </select>
+                        </div>
+
+                        <div class="d-flex align-items-center gap-1">
+                            <span class="small fw-bold text-secondary text-uppercase" style="font-size:0.7rem; letter-spacing:0.5px;">Branch:</span>
+                            <select id="switcherBranchSelect" name="branchId" class="form-select form-select-sm" style="border-radius:6px; font-size:0.8rem; font-weight:600; padding:0.25rem 1.5rem 0.25rem 0.5rem; background-color:#faf8f5; border-color:#d4cbbd; color:var(--text-color); cursor:pointer;" onchange="this.form.submit();">
+                                <!option value="0" @(0 == currBranchId ? "selected" : "")>Consolidated Dashboard</!option>
+                                @foreach (var b in filteredBranches)
+                                {
+                                    <!option value="@b.BranchId" @(b.BranchId == currBranchId ? "selected" : "")>@b.BranchName</!option>
+                                }
+                            </select>
+                        </div>
+                    </form>
+
+                    <script>
+                        function updateSwitcherBranches() {
+                            const compSelect = document.getElementsByName("companyId")[0];
+                            const branchSelect = document.getElementById("switcherBranchSelect");
+                            const selectedCompanyId = compSelect.value;
+
+                            const branchesData = [
+                                @foreach (var b in activeBranches)
+                                {
+                                            @:{ id: @b.BranchId, compId: @b.CompanyId, name: "@b.BranchName" },
+                                }
+                            ];
+
+                            branchSelect.innerHTML = "";
+
+                            const allOpt = document.createElement("option");
+                            allOpt.value = "0";
+                            allOpt.text = "Consolidated Dashboard";
+                            if (0 == @currBranchId) allOpt.selected = true;
+                            branchSelect.appendChild(allOpt);
+
+                            const matching = branchesData.filter(b => b.compId == selectedCompanyId);
+                            matching.forEach(b => {
+                                const opt = document.createElement("option");
+                                opt.value = b.id;
+                                opt.text = b.name;
+                                if (b.id == @currBranchId) opt.selected = true;
+                                branchSelect.appendChild(opt);
+                            });
+
+                            compSelect.form.submit();
+                        }
+                    </script>
+                }
+
+                <div class="topbar-right">
+                    <!-- Language Selector Dropdown -->
+                    <div class="dropdown me-1">
+                        <button class="btn btn-sm btn-outline-secondary dropdown-toggle d-flex align-items-center gap-1.5 px-2.5 py-1 notranslate" translate="no" type="button" data-bs-toggle="dropdown" aria-expanded="false" style="border-radius:6px; font-size:0.8rem; font-weight:600; background-color:#faf8f5; border-color:#d4cbbd; color:var(--text-color);">
+                            <i class="fa-solid fa-globe text-primary"></i> <span class="d-none d-md-inline">Language</span>
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end shadow border-0 mt-2 notranslate" translate="no" style="background-color: #ffffff; border: 1px solid var(--border-warm) !important; font-size:0.85rem;">
+                            <li><a class="dropdown-item py-1.5" href="#" onclick="changeLanguage('en'); return false;">🇬🇧 English</a></li>
+                            <li><a class="dropdown-item py-1.5" href="#" onclick="changeLanguage('hi'); return false;">🇮🇳 हिंदी (Hindi)</a></li>
+                            <li><a class="dropdown-item py-1.5" href="#" onclick="changeLanguage('es'); return false;">🇪🇸 Español (Spanish)</a></li>
+                            <li><a class="dropdown-item py-1.5" href="#" onclick="changeLanguage('ar'); return false;">🇸🇦 العربية (Arabic)</a></li>
+                            <li><a class="dropdown-item py-1.5" href="#" onclick="changeLanguage('fr'); return false;">🇫🇷 Français (French)</a></li>
+                            <li><a class="dropdown-item py-1.5" href="#" onclick="changeLanguage('de'); return false;">🇩🇪 Deutsch (German)</a></li>
+                            <li><a class="dropdown-item py-1.5" href="#" onclick="changeLanguage('ur'); return false;">🇵🇰 اردو (Urdu)</a></li>
+                            <li><a class="dropdown-item py-1.5" href="#" onclick="changeLanguage('zh-CN'); return false;">🇨🇳 中文 (Chinese)</a></li>
+                        </ul>
+                    </div>
+
+                    <!-- Notifications Dropdown -->
+                    <div class="dropdown">
+                        <button class="icon-btn" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="Notifications">
+                            <i class="fa-regular fa-bell"></i>
+                            <span class="badge bg-danger icon-badge" id="topbar-notif-count">3</span>
+                        </button>
+                        <div class="dropdown-menu dropdown-menu-end shadow border-0 mt-2 p-0" style="width: 320px; border: 1px solid var(--border-warm) !important; font-size: 0.85rem;">
+                            <div class="p-2.5 border-bottom d-flex justify-content-between align-items-center bg-light-subtle">
+                                <h6 class="fw-bold m-0 text-dark" style="font-size:0.85rem;"><i class="fa-solid fa-bell text-primary me-1.5"></i>Notifications</h6>
+                                <span class="badge bg-danger-subtle text-danger rounded-pill px-2">Live Profile Stream</span>
+                            </div>
+                            <div class="p-2 border-bottom text-start" id="topbar-notif-items">
+                                <a href="/Notifications" class="text-decoration-none d-block p-2 rounded bg-light-subtle mb-1 hover-bg">
+                                    <span class="fw-bold d-block text-dark small">New Activity & System Alerts</span>
+                                    <span class="text-muted extra-small">View real-time operational notifications</span>
+                                </a>
+                            </div>
+                            <div class="p-2 text-center bg-light">
+                                <a href="/Notifications" class="text-decoration-none fw-bold text-primary small d-block">
+                                    View All Notifications <i class="fa-solid fa-arrow-right ms-1"></i>
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Messages Dropdown -->
+                    <div class="dropdown">
+                        <button class="icon-btn" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="Inbox Messages">
+                            <i class="fa-regular fa-envelope"></i>
+                            <span class="badge bg-primary icon-badge">1</span>
+                        </button>
+                        <div class="dropdown-menu dropdown-menu-end shadow border-0 mt-2 p-0" style="width: 320px; border: 1px solid var(--border-warm) !important; font-size: 0.85rem;">
+                            <div class="p-2.5 border-bottom d-flex justify-content-between align-items-center bg-light-subtle">
+                                <h6 class="fw-bold m-0 text-dark" style="font-size:0.85rem;"><i class="fa-solid fa-envelope text-primary me-1.5"></i>Inbox Messages</h6>
+                                <span class="badge bg-primary-subtle text-primary rounded-pill px-2">Personalized Inbox</span>
+                            </div>
+                            <div class="p-2 border-bottom text-start">
+                                <a href="/Inbox" class="text-decoration-none d-block p-2 rounded bg-light-subtle mb-1">
+                                    <span class="fw-bold d-block text-dark small">Internal Messages</span>
+                                    <span class="text-muted extra-small text-truncate d-block">Check your messages and sent items</span>
+                                </a>
+                            </div>
+                            <div class="p-2 text-center bg-light">
+                                <a href="/Inbox" class="text-decoration-none fw-bold text-primary small d-block">
+                                    Open Inbox & Messages <i class="fa-solid fa-arrow-right ms-1"></i>
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Fullscreen -->
+                    <button class="icon-btn d-none d-sm-block" onclick="toggleFullscreen()">
+                        <i class="fa-solid fa-expand"></i>
+                    </button>
+
+                    <!-- Vertical Divider -->
+                    <div style="width: 1px; height: 24px; background-color: var(--border-warm);"></div>
+
+                    <!-- Profile dropdown -->
+                    <div class="dropdown">
+                        <a href="#" class="user-profile dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
+                            <img src="@layoutProfilePhoto" alt="@userFullName" class="profile-img" style="object-fit: cover; border: 2px solid var(--primary-warm);" />
+                            <div class="profile-info d-none d-sm-block text-start">
+                                <div class="profile-name">@userFullName</div>
+                                <div class="profile-role">@userRole</div>
+                            </div>
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-end shadow border-0 mt-2" style="background-color: #ffffff; border: 1px solid var(--border-warm) !important;">
+                            <li><h6 class="dropdown-header" style="color: var(--text-color); font-weight: 700;">@userCompany</h6></li>
+                            <li><hr class="dropdown-divider" style="background-color: var(--border-warm);"></li>
+                            <li><a class="dropdown-item" href="/Profile" style="color: var(--text-color);"><i class="fa-regular fa-user me-2"></i> My Profile</a></li>
+                            <li><a class="dropdown-item" href="/Settings" style="color: var(--text-color);"><i class="fa-solid fa-sliders me-2"></i> Settings</a></li>
+                            <li><hr class="dropdown-divider" style="background-color: var(--border-warm);"></li>
+                            <li><a class="dropdown-item text-danger" href="/Account/Logout"><i class="fa-solid fa-right-from-bracket me-2"></i> Sign Out</a></li>
+                        </ul>
+                    </div>
+                </div>
+            </header>
+
+            <!-- Main Panel Render Area -->
+            <main class="main-inner">
+                @RenderBody()
+            </main>
+        </div>
+    </div>
+
+    <div id="google_translate_element"></div>
+    <script src="~/js/language-selector.js" asp-append-version="true"></script>
+    <script>
+        function toggleSidebar() {
+            document.getElementById('sidebar').classList.toggle('active');
+        }
+
+        function toggleFullscreen() {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen().catch(err => {
+                    console.log(`Error attempting to enable full-screen mode: ${err.message}`);
+                });
+            } else {
+                document.exitFullscreen();
+            }
+        }
+
+        function escapeHtmlNotif(text) {
+            if (!text) return '';
+            return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        }
+
+        function pollRealtimeUserNotifications() {
+            fetch('/Notifications/GetUserNotifications')
+                .then(function (res) { return res.json(); })
+                .then(function (data) {
+                    if (!data) return;
+                    var badgeEl = document.getElementById('topbar-notif-count');
+                    if (badgeEl) {
+                        badgeEl.innerText = data.unreadCount;
+                        badgeEl.style.display = data.unreadCount > 0 ? 'inline-block' : 'none';
+                    }
+
+                    var containerEl = document.getElementById('topbar-notif-items');
+                    if (containerEl && data.notifications && data.notifications.length > 0) {
+                        var html = '';
+                        data.notifications.forEach(function (n) {
+                            var unreadTag = !n.isRead ? '<span class="badge bg-primary rounded-pill ms-1" style="font-size:0.55rem;">NEW</span>' : '';
+                            var borderStyle = !n.isRead ? 'border-left: 3px solid #3b82f6; background-color: #f8fafc;' : '';
+                            var targetAttr = (n.targetUrl && (n.targetUrl.toLowerCase().includes('pdf') || n.targetUrl.toLowerCase().includes('download'))) ? 'target="_blank"' : 'target="_self"';
+                            html += `
+                                <a href="${n.targetUrl || '/Notifications'}" ${targetAttr} class="text-decoration-none d-block p-2 rounded mb-1 hover-bg" style="${borderStyle}">
+                                    <div class="d-flex align-items-center justify-content-between mb-1">
+                                        <span class="fw-bold d-block text-dark small"><i class="fa-solid ${n.iconClass || 'fa-bell'} ${n.colorClass || 'text-primary'} me-1.5"></i>${escapeHtmlNotif(n.title)} ${unreadTag}</span>
+                                        <span class="text-muted extra-small" style="font-size: 0.7rem;">${n.timeAgo}</span>
+                                    </div>
+                                    <span class="text-muted extra-small d-block text-truncate mt-0.5" style="font-size:0.75rem;">${escapeHtmlNotif(n.description)}</span>
+                                </a>
+                            `;
+                        });
+                        containerEl.innerHTML = html;
+                    } else if (containerEl) {
+                        containerEl.innerHTML = '<div class="p-2 text-muted small text-center">No recent notifications.</div>';
+                    }
+                })
+                .catch(function (err) { console.log(err); });
+        }
+
+        document.addEventListener('DOMContentLoaded', function () {
+            pollRealtimeUserNotifications();
+            setInterval(pollRealtimeUserNotifications, 5000);
+
+            // Real-time SignalR Hub Connection for Notifications & Distribution
+            if (typeof signalR !== 'undefined') {
+                const hubConn = new signalR.HubConnectionBuilder()
+                    .withUrl("/erpNotificationHub")
+                    .withAutomaticReconnect([0, 2000, 5000, 10000])
+                    .build();
+
+                hubConn.on("ReceivePayslipIssuedAlert", function (data) {
+                    console.log("[SignalR] Received Payslip Issued Alert:", data);
+                    if (typeof toastr !== 'undefined') {
+                        toastr.info(data.message || `Payslip for ${data.payPeriod} issued!`, "Payslip Distribution", {
+                            timeOut: 6000,
+                            closeButton: true,
+                            progressBar: true
+                        });
+                    }
+                    pollRealtimeUserNotifications();
+                });
+
+                hubConn.start().then(function () {
+                    console.log("[SignalR] Layout connected to /erpNotificationHub");
+                }).catch(function (err) {
+                    console.warn("[SignalR] Connection error:", err.toString());
+                });
+            }
+        });
+    </script>
+    @await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>

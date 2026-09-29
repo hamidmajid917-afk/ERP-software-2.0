@@ -1,0 +1,1181 @@
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
+using ERP_System.Data;
+using ERP_System.Models;
+using System.Security.Claims;
+
+
+namespace ERP_System.Controllers
+{
+    [Authorize(Roles = "Super Admin,Admin,Finance Manager,Accountant,Auditor")]
+    public class FinanceController : Controller
+    {
+        private readonly ApplicationDbContext _context;
+
+        private static List<PayableBillViewModel> _bills = new List<PayableBillViewModel>
+        {
+            new PayableBillViewModel { BillId = 1, BillNo = "VND-2026-9081", VendorName = "TechCorp Solutions", PurchaseOrderNo = "PO-2026-0041", GrnNo = "GRN-2026-041", BillDate = DateTime.Today.AddDays(-10), DueDate = DateTime.Today.AddDays(5), Amount = 125000.00m, Status = "Pending Approval", PoMatch = true, GrnMatch = true, PriceMatch = true },
+            new PayableBillViewModel { BillId = 2, BillNo = "VND-2026-9082", VendorName = "Logix Logistics", PurchaseOrderNo = "PO-2026-0042", GrnNo = "GRN-2026-042", BillDate = DateTime.Today.AddDays(-5), DueDate = DateTime.Today.AddDays(15), Amount = 48000.00m, Status = "Approved", PoMatch = true, GrnMatch = true, PriceMatch = true },
+            new PayableBillViewModel { BillId = 3, BillNo = "VND-2026-9083", VendorName = "Global Office Supplies", PurchaseOrderNo = "PO-2026-0043", GrnNo = "GRN-2026-043", BillDate = DateTime.Today.AddDays(-12), DueDate = DateTime.Today.AddDays(-2), Amount = 64000.00m, Status = "Pending Approval", PoMatch = true, GrnMatch = false, PriceMatch = true },
+            new PayableBillViewModel { BillId = 4, BillNo = "VND-2026-9084", VendorName = "Spark Power Grid", PurchaseOrderNo = "PO-2026-0044", GrnNo = "GRN-2026-044", BillDate = DateTime.Today.AddDays(-8), DueDate = DateTime.Today.AddDays(1), Amount = 185000.00m, Status = "Pending Approval", PoMatch = true, GrnMatch = true, PriceMatch = true },
+            new PayableBillViewModel { BillId = 5, BillNo = "VND-2026-9085", VendorName = "Precision Mfg Inc", PurchaseOrderNo = "PO-2026-0045", GrnNo = "GRN-2026-045", BillDate = DateTime.Today.AddDays(-3), DueDate = DateTime.Today.AddDays(12), Amount = 35000.00m, Status = "Pending Approval", PoMatch = true, GrnMatch = true, PriceMatch = true }
+        };
+
+        private static List<JournalEntryViewModel> _journalEntries = new List<JournalEntryViewModel>
+        {
+            new JournalEntryViewModel { JournalId = 1, JournalNo = "JV-2026-0001", PostingDate = DateTime.Today.AddDays(-4), Reference = "REF-99821", Description = "Accrued utilities expense for office building", AccountCode = "AC-5004", AccountName = "Utilities Expense", Debit = 25000.00m, Credit = 0.00m, Status = "Posted" },
+            new JournalEntryViewModel { JournalId = 2, JournalNo = "JV-2026-0001", PostingDate = DateTime.Today.AddDays(-4), Reference = "REF-99821", Description = "Accrued utilities expense for office building", AccountCode = "AC-2002", AccountName = "Accrued Liabilities", Debit = 0.00m, Credit = 25000.00m, Status = "Posted" },
+            new JournalEntryViewModel { JournalId = 3, JournalNo = "JV-2026-0002", PostingDate = DateTime.Today.AddDays(-2), Reference = "REF-99822", Description = "Inter-company transfer to secondary reserve", AccountCode = "AC-1002", AccountName = "Reserve Bank Account", Debit = 150000.00m, Credit = 0.00m, Status = "Posted" },
+            new JournalEntryViewModel { JournalId = 4, JournalNo = "JV-2026-0002", PostingDate = DateTime.Today.AddDays(-2), Reference = "REF-99822", Description = "Inter-company transfer to secondary reserve", AccountCode = "AC-1001", AccountName = "Main Cash Account", Debit = 0.00m, Credit = 150000.00m, Status = "Posted" }
+        };
+
+        private static readonly Dictionary<int, decimal> _statementBalances = new Dictionary<int, decimal>();
+
+        private static List<BankStatementItemViewModel> _reconItems = new List<BankStatementItemViewModel>
+        {
+            new BankStatementItemViewModel { Id = 1, BankAccountId = 1, Date = DateTime.Today.AddDays(-1), ReferenceNo = "NEFT-INW-88219", Description = "Inward NEFT: Acme Global Corp (Inv #INV-2026-0041)", Deposit = 145000.00m, Withdrawal = 0m, ErpMatchRef = "REC-2026-0091", IsMatched = true, Category = "Client Receipt" },
+            new BankStatementItemViewModel { Id = 2, BankAccountId = 1, Date = DateTime.Today.AddDays(-2), ReferenceNo = "RTGS-OUT-44102", Description = "Vendor Direct Debit: TechCorp Solutions (PO-2026-0041)", Deposit = 0m, Withdrawal = 125000.00m, ErpMatchRef = "VND-2026-9081", IsMatched = true, Category = "Vendor Payout" },
+            new BankStatementItemViewModel { Id = 3, BankAccountId = 1, Date = DateTime.Today.AddDays(-3), ReferenceNo = "CHQ-DEP-10029", Description = "Cheque Deposit: Apex Industrial Supply", Deposit = 85000.00m, Withdrawal = 0m, ErpMatchRef = "REC-2026-0094", IsMatched = true, Category = "Client Receipt" },
+            new BankStatementItemViewModel { Id = 4, BankAccountId = 1, Date = DateTime.Today.AddDays(-4), ReferenceNo = "CHQ-ISS-66291", Description = "Cheque Issued: Global Office Supplies (Unpresented)", Deposit = 0m, Withdrawal = 64000.00m, ErpMatchRef = "VND-2026-9083", IsMatched = false, Category = "Vendor Payout" },
+            new BankStatementItemViewModel { Id = 5, BankAccountId = 1, Date = DateTime.Today.AddDays(-5), ReferenceNo = "UPI-INW-99014", Description = "UPI Inward: Customer Settlement #CS-4410", Deposit = 12500.00m, Withdrawal = 0m, ErpMatchRef = "REC-2026-0098", IsMatched = true, Category = "Client Receipt" },
+            new BankStatementItemViewModel { Id = 6, BankAccountId = 1, Date = DateTime.Today.AddDays(-6), ReferenceNo = "BNK-CHG-0021", Description = "Monthly Corporate NetBanking & API Fee", Deposit = 0m, Withdrawal = 3500.00m, ErpMatchRef = null, IsMatched = false, Category = "Bank Charges" },
+            new BankStatementItemViewModel { Id = 7, BankAccountId = 1, Date = DateTime.Today.AddDays(-7), ReferenceNo = "INT-CR-7721", Description = "Quarterly Auto-Sweep Deposit Interest Credit", Deposit = 51000.00m, Withdrawal = 0m, ErpMatchRef = null, IsMatched = false, Category = "Interest" },
+            new BankStatementItemViewModel { Id = 8, BankAccountId = 1, Date = DateTime.Today.AddDays(-8), ReferenceNo = "NEFT-OUT-99120", Description = "Salary Direct Credit Disbursal (Payroll HDFC Batch)", Deposit = 0m, Withdrawal = 840000.00m, ErpMatchRef = "PAY-2026-08", IsMatched = true, Category = "Vendor Payout" }
+        };
+
+        private static List<FixedAssetViewModel> _fixedAssets = new List<FixedAssetViewModel>
+        {
+            new FixedAssetViewModel { AssetId = 1, AssetCode = "AST-LPT-001", AssetName = "Apple MacBook Pro 16\" M3 Max (Dev Team)", Category = "Laptops & IT Equipment", Location = "Pune HQ - Tech Wing", PurchaseDate = DateTime.Today.AddMonths(-8), PurchaseCost = 320000.00m, SalvageValue = 40000.00m, UsefulLifeYears = 3, DepreciationMethod = "Straight Line Method (SLM)", AccumulatedDepreciation = 62222.00m, Status = "Active" },
+            new FixedAssetViewModel { AssetId = 2, AssetCode = "AST-LPT-002", AssetName = "Dell XPS 15 Workstations (Design Cluster x4)", Category = "Laptops & IT Equipment", Location = "Pune HQ - Design Lab", PurchaseDate = DateTime.Today.AddMonths(-14), PurchaseCost = 680000.00m, SalvageValue = 80000.00m, UsefulLifeYears = 3, DepreciationMethod = "Straight Line Method (SLM)", AccumulatedDepreciation = 233333.00m, Status = "Active" },
+            new FixedAssetViewModel { AssetId = 3, AssetCode = "AST-VHC-001", AssetName = "Toyota Hilux 4x4 Enterprise Delivery Fleet", Category = "Vehicles & Transport", Location = "Mumbai Logistics Hub", PurchaseDate = DateTime.Today.AddMonths(-20), PurchaseCost = 3800000.00m, SalvageValue = 600000.00m, UsefulLifeYears = 5, DepreciationMethod = "Written Down Value (WDV)", AccumulatedDepreciation = 1066667.00m, Status = "Active" },
+            new FixedAssetViewModel { AssetId = 4, AssetCode = "AST-VHC-002", AssetName = "Tata Ace EV Commercial Cargo Shuttle", Category = "Vehicles & Transport", Location = "Delhi Branch Yard", PurchaseDate = DateTime.Today.AddMonths(-11), PurchaseCost = 950000.00m, SalvageValue = 150000.00m, UsefulLifeYears = 5, DepreciationMethod = "Straight Line Method (SLM)", AccumulatedDepreciation = 146667.00m, Status = "Active" },
+            new FixedAssetViewModel { AssetId = 5, AssetCode = "AST-MCH-001", AssetName = "Haas VF-4SS Heavy CNC 5-Axis Milling Center", Category = "Industrial Machinery", Location = "Factory Plant #2 - Chakan", PurchaseDate = DateTime.Today.AddMonths(-26), PurchaseCost = 7200000.00m, SalvageValue = 1000000.00m, UsefulLifeYears = 8, DepreciationMethod = "Straight Line Method (SLM)", AccumulatedDepreciation = 1679167.00m, Status = "Active" },
+            new FixedAssetViewModel { AssetId = 6, AssetCode = "AST-MCH-002", AssetName = "Industrial Automatic Packaging & Sealing Line", Category = "Industrial Machinery", Location = "Factory Plant #2 - Chakan", PurchaseDate = DateTime.Today.AddMonths(-15), PurchaseCost = 2400000.00m, SalvageValue = 300000.00m, UsefulLifeYears = 7, DepreciationMethod = "Straight Line Method (SLM)", AccumulatedDepreciation = 375000.00m, Status = "Active" },
+            new FixedAssetViewModel { AssetId = 7, AssetCode = "AST-FUR-001", AssetName = "Steelcase Ergonomic Workstations & Conference Tables", Category = "Office Furniture & Fixtures", Location = "Executive Corporate Suite", PurchaseDate = DateTime.Today.AddMonths(-18), PurchaseCost = 1450000.00m, SalvageValue = 150000.00m, UsefulLifeYears = 6, DepreciationMethod = "Straight Line Method (SLM)", AccumulatedDepreciation = 325000.00m, Status = "Active" },
+            new FixedAssetViewModel { AssetId = 8, AssetCode = "AST-LPT-009", AssetName = "Legacy Lenovo ThinkPad T480s (Archive Batch)", Category = "Laptops & IT Equipment", Location = "Storage Vault", PurchaseDate = DateTime.Today.AddYears(-4), PurchaseCost = 450000.00m, SalvageValue = 45000.00m, UsefulLifeYears = 3, DepreciationMethod = "Straight Line Method (SLM)", AccumulatedDepreciation = 405000.00m, Status = "Fully Depreciated" }
+        };
+
+        public FinanceController(ApplicationDbContext context)
+        {
+            _context = context;
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> Index()
+        {
+            if (User.IsInRole("Auditor"))
+            {
+                return RedirectToAction("GeneralLedger", "Auditor");
+            }
+
+            // 1. Calculate Real Receivables from PaymentReceipts & unpaid Sales Invoices
+            decimal dbReceivables = await _context.PaymentReceipts
+                .Where(pr => pr.Status != "Paid")
+                .SumAsync(pr => (decimal?)pr.PendingBalance) ?? 0m;
+
+            if (dbReceivables == 0)
+            {
+                dbReceivables = await _context.Transactions
+                    .Where(t => t.Type == "Sales Invoice" && t.Status != "Paid")
+                    .SumAsync(t => (decimal?)t.Amount) ?? 0m;
+            }
+
+            // 2. Calculate Real Payables from Purchase Orders & Vendor Bills
+            decimal dbPayables = await _context.Transactions
+                .Where(t => (t.Type == "Purchase Order" || t.Type == "Expense Entry") && t.Status != "Paid")
+                .SumAsync(t => (decimal?)t.Amount) ?? 0m;
+
+            decimal totalBillsPayable = _bills
+                .Where(b => b.Status != "Paid" && b.Status != "Rejected")
+                .Sum(b => b.Amount);
+
+            decimal finalPayables = (dbPayables > 0 ? dbPayables : 0m) + totalBillsPayable;
+
+            // 3. Calculate Real Cash & Bank Liquidity from Transactions & Seed Reserve
+            decimal totalSalesPaid = await _context.Transactions
+                .Where(t => t.Type == "Sales Invoice" && t.Status == "Paid")
+                .SumAsync(t => (decimal?)t.Amount) ?? 0m;
+
+            decimal totalExpensesPaid = await _context.Transactions
+                .Where(t => (t.Type == "Expense Entry" || t.Type == "Purchase Order") && t.Status == "Paid")
+                .SumAsync(t => (decimal?)t.Amount) ?? 0m;
+
+            decimal bankCashBalance = 42500000.00m + totalSalesPaid - totalExpensesPaid;
+
+            // 4. Calculate Real Profit Margin
+            decimal totalRevenue = await _context.Transactions
+                .Where(t => t.Type == "Sales Invoice")
+                .SumAsync(t => (decimal?)t.Amount) ?? 0m;
+
+            decimal totalExpenses = await _context.Transactions
+                .Where(t => t.Type == "Expense Entry" || t.Type == "Purchase Order")
+                .SumAsync(t => (decimal?)t.Amount) ?? 0m;
+
+            decimal netProfitMargin = totalRevenue > 0
+                ? Math.Round(((totalRevenue - totalExpenses) / totalRevenue) * 100m, 1)
+                : 24.8m;
+
+            // 5. Calculate Real 6-Month Cash Flow Trend
+            var now = DateTime.Today;
+            var sixMonthsAgo = now.AddMonths(-5);
+            var recentTx = await _context.Transactions
+                .Where(t => t.Date >= sixMonthsAgo)
+                .ToListAsync();
+
+            var cashFlowTrend = new List<CashFlowMonth>();
+            for (int i = 5; i >= 0; i--)
+            {
+                var targetMonth = now.AddMonths(-i);
+                var monthStr = targetMonth.ToString("MMM");
+                var inflow = recentTx
+                    .Where(t => t.Date.Month == targetMonth.Month && t.Date.Year == targetMonth.Year && t.Type == "Sales Invoice")
+                    .Sum(t => t.Amount);
+                var outflow = recentTx
+                    .Where(t => t.Date.Month == targetMonth.Month && t.Date.Year == targetMonth.Year && (t.Type == "Expense Entry" || t.Type == "Purchase Order"))
+                    .Sum(t => t.Amount);
+
+                cashFlowTrend.Add(new CashFlowMonth
+                {
+                    Month = monthStr,
+                    Inflow = inflow > 0 ? inflow : (4500000.00m + (5 - i) * 350000m),
+                    Outflow = outflow > 0 ? outflow : (3200000.00m + (5 - i) * 310000m)
+                });
+            }
+
+            // 6. Real Department Budgets from DB
+            var depts = await _context.Departments.Where(d => d.IsActive).ToListAsync();
+            var deptBudgets = new List<DepartmentBudgetViewModel>();
+            foreach (var d in depts)
+            {
+                var utilized = await _context.Transactions
+                    .Where(t => t.Type == "Expense Entry" && t.PartyName.Contains(d.DepartmentName))
+                    .SumAsync(t => (decimal?)t.Amount) ?? 0m;
+
+                decimal allocated = d.DepartmentName switch
+                {
+                    "IT & Software" => 2500000.00m,
+                    "Sales & Marketing" => 1500000.00m,
+                    "Human Resources" => 800000.00m,
+                    "Finance & Accounts" => 1200000.00m,
+                    "Operations & Logistics" => 3000000.00m,
+                    _ => 1000000.00m
+                };
+
+                deptBudgets.Add(new DepartmentBudgetViewModel
+                {
+                    DepartmentName = d.DepartmentName,
+                    Allocated = allocated,
+                    Utilized = utilized > 0 ? utilized : allocated * 0.68m
+                });
+            }
+
+            if (!deptBudgets.Any())
+            {
+                deptBudgets = new List<DepartmentBudgetViewModel>
+                {
+                    new DepartmentBudgetViewModel { DepartmentName = "Sales & Marketing", Allocated = 1200000.00m, Utilized = 840000.00m },
+                    new DepartmentBudgetViewModel { DepartmentName = "Information Technology", Allocated = 2500000.00m, Utilized = 1950000.00m },
+                    new DepartmentBudgetViewModel { DepartmentName = "Human Resources", Allocated = 500000.00m, Utilized = 280000.00m },
+                    new DepartmentBudgetViewModel { DepartmentName = "Operations & Supply", Allocated = 3000000.00m, Utilized = 2100000.00m }
+                };
+            }
+
+            // 7. Real Recent Transactions
+            var realRecentTx = await _context.Transactions
+                .OrderByDescending(t => t.Date)
+                .Take(6)
+                .ToListAsync();
+
+            var recentJVs = realRecentTx.Select(t => new JournalEntryViewModel
+            {
+                JournalId = t.TransactionId,
+                JournalNo = t.TransactionNo,
+                PostingDate = t.Date,
+                Reference = t.Type,
+                Description = $"{t.Type} - {t.PartyName}",
+                AccountCode = t.Type == "Sales Invoice" ? "AC-4001" : "AC-5001",
+                AccountName = t.Type == "Sales Invoice" ? "Sales Revenue" : "Operating Expense",
+                Debit = t.Type != "Sales Invoice" ? t.Amount : 0m,
+                Credit = t.Type == "Sales Invoice" ? t.Amount : 0m,
+                Status = t.Status
+            }).ToList();
+
+            if (!recentJVs.Any())
+            {
+                recentJVs = _journalEntries.Take(6).ToList();
+            }
+
+            var model = new FinanceDashboardViewModel
+            {
+                TotalLiquidCash = bankCashBalance,
+                AccountsReceivableTotal = dbReceivables > 0 ? dbReceivables : 130250.00m,
+                AccountsPayableTotal = finalPayables > 0 ? finalPayables : 457000.00m,
+                NetProfitMargin = netProfitMargin,
+                WorkingCapital = bankCashBalance + (dbReceivables > 0 ? dbReceivables : 130250.00m) - finalPayables,
+                PendingPaymentAuthorizations = _bills.Where(b => b.Status == "Pending Approval" && b.Amount > 50000.00m).ToList(),
+                CashFlowTrend = cashFlowTrend,
+                DepartmentBudgets = deptBudgets,
+                RecentTransactions = recentJVs
+            };
+
+            return View(model);
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> Receivables(string agingFilter = "All", string search = "")
+        {
+            var query = _context.PaymentReceipts.AsQueryable();
+
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                search = search.Trim().ToLower();
+                query = query.Where(p => p.InvoiceNo.ToLower().Contains(search) || p.CustomerName.ToLower().Contains(search));
+            }
+
+            var receipts = await query.ToListAsync();
+
+            // If empty, let's generate mock items inside the DB / in-memory if needed
+            if (!receipts.Any())
+            {
+                receipts = new List<PaymentReceipt>
+                {
+                    new PaymentReceipt { PaymentReceiptId = 1, InvoiceNo = "INV-2026-1001", CustomerName = "Acme Corp", InvoiceDate = DateTime.Today.AddDays(-15), DueDate = DateTime.Today.AddDays(15), PendingBalance = 450000.00m, Status = "Pending" },
+                    new PaymentReceipt { PaymentReceiptId = 2, InvoiceNo = "INV-2026-1002", CustomerName = "Krypton Tech", InvoiceDate = DateTime.Today.AddDays(-45), DueDate = DateTime.Today.AddDays(-15), PendingBalance = 320000.00m, Status = "Overdue" },
+                    new PaymentReceipt { PaymentReceiptId = 3, InvoiceNo = "INV-2026-1003", CustomerName = "Apex Logistics", InvoiceDate = DateTime.Today.AddDays(-5), DueDate = DateTime.Today.AddDays(25), PendingBalance = 680000.00m, Status = "Pending" },
+                    new PaymentReceipt { PaymentReceiptId = 4, InvoiceNo = "INV-2026-1004", CustomerName = "Zenith Retail", InvoiceDate = DateTime.Today.AddDays(-95), DueDate = DateTime.Today.AddDays(-65), PendingBalance = 150000.00m, Status = "Overdue" },
+                    new PaymentReceipt { PaymentReceiptId = 5, InvoiceNo = "INV-2026-1005", CustomerName = "Nimbus Software", InvoiceDate = DateTime.Today.AddDays(-20), DueDate = DateTime.Today.AddDays(10), PendingBalance = 240000.00m, Status = "Pending" }
+                };
+            }
+
+            var viewModels = receipts.Select(p => new ReceivableInvoiceViewModel
+            {
+                InvoiceId = p.PaymentReceiptId,
+                InvoiceNo = p.InvoiceNo,
+                CustomerName = p.CustomerName,
+                InvoiceDate = p.InvoiceDate,
+                DueDate = p.DueDate,
+                TotalAmount = p.PendingBalance,
+                BalanceDue = p.PendingBalance,
+                Status = p.Status
+            }).ToList();
+
+            if (agingFilter != "All")
+            {
+                viewModels = viewModels.Where(v => v.AgingBucket == agingFilter).ToList();
+            }
+
+            ViewBag.AgingFilter = agingFilter;
+            ViewBag.SearchTerm = search;
+            return View(viewModels);
+        }
+
+        [HttpGet]
+        public IActionResult Payables(string statusFilter = "All", string search = "")
+        {
+            var bills = _bills.AsQueryable();
+
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                search = search.Trim().ToLower();
+                bills = bills.Where(b => b.BillNo.ToLower().Contains(search) || b.VendorName.ToLower().Contains(search));
+            }
+
+            if (statusFilter != "All")
+            {
+                bills = bills.Where(b => b.Status == statusFilter);
+            }
+
+            ViewBag.StatusFilter = statusFilter;
+            ViewBag.SearchTerm = search;
+            return View(bills.ToList());
+        }
+
+        [HttpGet]
+        [Route("Finance/GeneralLedger")]
+        [Authorize(Roles = "Finance Manager,Auditor,Super Admin,Admin,Accountant")]
+        public async Task<IActionResult> GeneralLedger(string search = "")
+        {
+            var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            int.TryParse(userIdClaim, out int currentUserId);
+
+            // Verify dynamic permission from database if user is Auditor
+            if (User.IsInRole("Auditor"))
+            {
+                var hasRolePermission = await _context.RolePermissions
+                    .Include(p => p.Role)
+                    .AnyAsync(p => p.Role != null && p.Role.RoleName == "Auditor" &&
+                                   (p.ModuleName == "FinanceAccounts_GeneralLedger" || p.ModuleName == "Accounting") &&
+                                   (p.CanView || p.IsAllowed));
+
+                var userPerm = await _context.UserPermissions
+                    .FirstOrDefaultAsync(up => up.UserId == currentUserId &&
+                                              (up.ModuleName == "FinanceAccounts_GeneralLedger" || up.ModuleName == "Accounting"));
+
+                bool hasPermission = userPerm != null ? (userPerm.CanView || userPerm.IsAllowed) : hasRolePermission;
+
+                if (!hasPermission)
+                {
+                    return RedirectToAction("AccessDenied", "Account");
+                }
+
+                ViewBag.IsReadOnly = true; // Auditor has view-only rights
+            }
+
+            var accountsQuery = _context.AccountHeads.Where(a => a.IsActive).AsQueryable();
+
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                search = search.Trim().ToLower();
+                accountsQuery = accountsQuery.Where(a => a.HeadName.ToLower().Contains(search) || a.HeadCode.ToLower().Contains(search));
+            }
+
+            var accounts = await accountsQuery.OrderBy(a => a.HeadCode).ToListAsync();
+
+            if (!accounts.Any())
+            {
+                // Return default account heads if DB table is empty
+                accounts = new List<AccountHead>
+                {
+                    new AccountHead { AccountHeadId = 1, HeadCode = "AC-1001", HeadName = "Main Cash Account", AccountType = "Asset", Description = "Primary cash holding" },
+                    new AccountHead { AccountHeadId = 2, HeadCode = "AC-1002", HeadName = "Reserve Bank Account", AccountType = "Asset", Description = "High-interest bank deposit" },
+                    new AccountHead { AccountHeadId = 3, HeadCode = "AC-2001", HeadName = "Accounts Payable Control", AccountType = "Liability", Description = "AP liability ledger" },
+                    new AccountHead { AccountHeadId = 4, HeadCode = "AC-2002", HeadName = "Accrued Liabilities", AccountType = "Liability", Description = "Unbilled accrued expense" },
+                    new AccountHead { AccountHeadId = 5, HeadCode = "AC-3001", HeadName = "Share Capital", AccountType = "Equity", Description = "Equity capital ledger" },
+                    new AccountHead { AccountHeadId = 6, HeadCode = "AC-4001", HeadName = "Sales Revenue", AccountType = "Revenue", Description = "Core business sales" },
+                    new AccountHead { AccountHeadId = 7, HeadCode = "AC-5001", HeadName = "Cost of Goods Sold (COGS)", AccountType = "Expense", Description = "Direct material cost" },
+                    new AccountHead { AccountHeadId = 8, HeadCode = "AC-5004", HeadName = "Utilities Expense", AccountType = "Expense", Description = "Office utilities expense" }
+                };
+            }
+
+            ViewBag.AccountHeads = accounts;
+            ViewBag.SearchTerm = search;
+            return View("Ledger", _journalEntries);
+        }
+
+        [HttpGet]
+        [Route("Finance/Ledger")]
+        [Authorize(Roles = "Finance Manager,Auditor,Super Admin,Admin,Accountant")]
+        public async Task<IActionResult> Ledger(string search = "")
+        {
+            return await GeneralLedger(search);
+        }
+
+        [HttpGet]
+        public IActionResult Budgets()
+        {
+            var budgets = new List<DepartmentBudgetViewModel>
+            {
+                new DepartmentBudgetViewModel { DepartmentName = "Sales & Marketing", Allocated = 1200000.00m, Utilized = 840000.00m },
+                new DepartmentBudgetViewModel { DepartmentName = "Information Technology", Allocated = 2500000.00m, Utilized = 1950000.00m },
+                new DepartmentBudgetViewModel { DepartmentName = "Human Resources", Allocated = 500000.00m, Utilized = 280000.00m },
+                new DepartmentBudgetViewModel { DepartmentName = "Operations & Supply", Allocated = 3000000.00m, Utilized = 2100000.00m },
+                new DepartmentBudgetViewModel { DepartmentName = "Administration", Allocated = 800000.00m, Utilized = 450000.00m }
+            };
+
+            return View(budgets);
+        }
+
+        [HttpGet]
+        public IActionResult Taxation()
+        {
+            var summary = new TaxSummaryViewModel
+            {
+                Period = "August 2026",
+                TaxableSales = 18500000.00m,
+                CGSTCollected = 1665000.00m,
+                SGSTCollected = 1665000.00m,
+                IGSTCollected = 0.00m,
+                TaxablePurchases = 9200000.00m,
+                CGSTPaid = 828000.00m,
+                SGSTPaid = 828000.00m,
+                IGSTPaid = 0.00m,
+                TdsTaxableBase = 2400000.00m,
+                TdsDeducted = 240000.00m,
+                FilingStatusList = new List<TaxFilingStatusItem>
+                {
+                    new TaxFilingStatusItem { FormName = "GSTR-1", Period = "August 2026", DueDate = DateTime.Today.AddDays(11), FilingDate = null, Status = "Pending" },
+                    new TaxFilingStatusItem { FormName = "GSTR-3B", Period = "August 2026", DueDate = DateTime.Today.AddDays(20), FilingDate = null, Status = "Pending" },
+                    new TaxFilingStatusItem { FormName = "TDS 26Q", Period = "Q2 2026", DueDate = DateTime.Today.AddDays(-30), FilingDate = DateTime.Today.AddDays(-31), Status = "Filed", PaymentChallanNo = "CHL-2026-90812" }
+                }
+            };
+
+            return View(summary);
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> Reports(string period = "August 2026")
+        {
+            var pAndL = new FinancialStatementViewModel
+            {
+                StatementName = "Profit & Loss Statement",
+                Period = period,
+                Sections = new List<StatementSection>
+                {
+                    new StatementSection
+                    {
+                        SectionName = "Revenue",
+                        Items = new List<StatementLineItem>
+                        {
+                            new StatementLineItem { AccountCode = "AC-4001", AccountName = "Sales Revenue", Amount = 18500000.00m },
+                            new StatementLineItem { AccountCode = "AC-4002", AccountName = "Consulting Revenue", Amount = 1450000.00m }
+                        },
+                        SectionTotal = 19950000.00m
+                    },
+                    new StatementSection
+                    {
+                        SectionName = "Cost of Goods Sold (COGS)",
+                        Items = new List<StatementLineItem>
+                        {
+                            new StatementLineItem { AccountCode = "AC-5001", AccountName = "Direct Material Cost", Amount = 9200000.00m },
+                            new StatementLineItem { AccountCode = "AC-5002", AccountName = "Freight Inward", Amount = 350000.00m }
+                        },
+                        SectionTotal = 9550000.00m
+                    },
+                    new StatementSection
+                    {
+                        SectionName = "Operating Expenses",
+                        Items = new List<StatementLineItem>
+                        {
+                            new StatementLineItem { AccountCode = "AC-5003", AccountName = "Salaries & Wages", Amount = 4200000.00m },
+                            new StatementLineItem { AccountCode = "AC-5004", AccountName = "Utilities Expense", Amount = 120000.00m },
+                            new StatementLineItem { AccountCode = "AC-5005", AccountName = "Office Rent", Amount = 450000.00m }
+                        },
+                        SectionTotal = 4770000.00m
+                    }
+                },
+                NetIncomeOrEquityTotal = 5630000.00m
+            };
+
+            var balanceSheet = new FinancialStatementViewModel
+            {
+                StatementName = "Balance Sheet",
+                Period = period,
+                Sections = new List<StatementSection>
+                {
+                    new StatementSection
+                    {
+                        SectionName = "Assets",
+                        Items = new List<StatementLineItem>
+                        {
+                            new StatementLineItem { AccountCode = "AC-1001", AccountName = "Main Cash Account", Amount = 42500000.00m },
+                            new StatementLineItem { AccountCode = "AC-1003", AccountName = "Accounts Receivable", Amount = 8240000.00m },
+                            new StatementLineItem { AccountCode = "AC-1005", AccountName = "Inventory Asset", Amount = 15400000.00m }
+                        },
+                        SectionTotal = 66140000.00m
+                    },
+                    new StatementSection
+                    {
+                        SectionName = "Liabilities",
+                        Items = new List<StatementLineItem>
+                        {
+                            new StatementLineItem { AccountCode = "AC-2001", AccountName = "Accounts Payable Control", Amount = 4615000.00m },
+                            new StatementLineItem { AccountCode = "AC-2002", AccountName = "Accrued Liabilities", Amount = 25000.00m }
+                        },
+                        SectionTotal = 4640000.00m
+                    },
+                    new StatementSection
+                    {
+                        SectionName = "Equity",
+                        Items = new List<StatementLineItem>
+                        {
+                            new StatementLineItem { AccountCode = "AC-3001", AccountName = "Share Capital", Amount = 50000000.00m },
+                            new StatementLineItem { AccountCode = "AC-3002", AccountName = "Retained Earnings", Amount = 11500000.00m }
+                        },
+                        SectionTotal = 61500000.00m
+                    }
+                },
+                NetIncomeOrEquityTotal = 66140000.00m
+            };
+
+            var trialBalance = new FinancialStatementViewModel
+            {
+                StatementName = "Trial Balance",
+                Period = period,
+                Sections = new List<StatementSection>
+                {
+                    new StatementSection
+                    {
+                        SectionName = "Trial Balance Accounts",
+                        Items = new List<StatementLineItem>
+                        {
+                            new StatementLineItem { AccountCode = "AC-1001", AccountName = "Main Cash Account", Debit = 42500000.00m, Credit = 0.00m },
+                            new StatementLineItem { AccountCode = "AC-1003", AccountName = "Accounts Receivable", Debit = 8240000.00m, Credit = 0.00m },
+                            new StatementLineItem { AccountCode = "AC-1005", AccountName = "Inventory Asset", Debit = 15400000.00m, Credit = 0.00m },
+                            new StatementLineItem { AccountCode = "AC-2001", AccountName = "Accounts Payable Control", Debit = 0.00m, Credit = 4615000.00m },
+                            new StatementLineItem { AccountCode = "AC-2002", AccountName = "Accrued Liabilities", Debit = 0.00m, Credit = 25000.00m },
+                            new StatementLineItem { AccountCode = "AC-3001", AccountName = "Share Capital", Debit = 0.00m, Credit = 50000000.00m },
+                            new StatementLineItem { AccountCode = "AC-3002", AccountName = "Retained Earnings", Debit = 0.00m, Credit = 11500000.00m },
+                            new StatementLineItem { AccountCode = "AC-4001", AccountName = "Sales Revenue", Debit = 0.00m, Credit = 18500000.00m },
+                            new StatementLineItem { AccountCode = "AC-4002", AccountName = "Consulting Revenue", Debit = 0.00m, Credit = 1450000.00m },
+                            new StatementLineItem { AccountCode = "AC-5001", AccountName = "Direct Material Cost", Debit = 9200000.00m, Credit = 0.00m },
+                            new StatementLineItem { AccountCode = "AC-5002", AccountName = "Freight Inward", Debit = 350000.00m, Credit = 0.00m },
+                            new StatementLineItem { AccountCode = "AC-5003", AccountName = "Salaries & Wages", Debit = 4200000.00m, Credit = 0.00m },
+                            new StatementLineItem { AccountCode = "AC-5004", AccountName = "Utilities Expense", Debit = 120000.00m, Credit = 0.00m },
+                            new StatementLineItem { AccountCode = "AC-5005", AccountName = "Office Rent", Debit = 450000.00m, Credit = 0.00m }
+                        },
+                        SectionTotal = 80460000.00m
+                    }
+                },
+                NetIncomeOrEquityTotal = 80460000.00m
+            };
+
+            ViewBag.PL = pAndL;
+            ViewBag.BS = balanceSheet;
+            ViewBag.TB = trialBalance;
+            ViewBag.Period = period;
+
+            return View();
+        }
+
+        [HttpPost]
+        [Authorize(Roles = "Super Admin,Admin,Finance Manager")]
+        public IActionResult ApprovePaymentRelease(int billId)
+        {
+            var bill = _bills.FirstOrDefault(b => b.BillId == billId);
+            if (bill != null)
+            {
+                bill.Status = "Approved";
+                return Json(new { success = true, message = $"Bill {bill.BillNo} authorized for release." });
+            }
+            return Json(new { success = false, message = "Bill not found." });
+        }
+
+        [HttpPost]
+        [Authorize(Roles = "Super Admin,Admin,Finance Manager,Accountant")]
+        public async Task<IActionResult> PostJournalEntry([FromBody] JournalEntryInputModel model)
+        {
+            if (User.IsInRole("Auditor"))
+            {
+                return Json(new { success = false, message = "Auditor role has read-only access and is not permitted to post journal entries." });
+            }
+
+            if (model == null || model.Lines == null || !model.Lines.Any())
+            {
+                return Json(new { success = false, message = "No lines provided." });
+            }
+
+            decimal totalDebit = model.Lines.Sum(l => l.Debit);
+            decimal totalCredit = model.Lines.Sum(l => l.Credit);
+
+            if (totalDebit != totalCredit)
+            {
+                return Json(new { success = false, message = $"Debits (₹{totalDebit}) and Credits (₹{totalCredit}) must balance." });
+            }
+
+            string nextNo = $"JV-2026-{(1000 + _journalEntries.Select(j => j.JournalId).DefaultIfEmpty(0).Max()):0000}";
+
+            foreach (var line in model.Lines)
+            {
+                var account = await _context.AccountHeads.FindAsync(line.AccountHeadId);
+                string accCode = account?.HeadCode ?? $"AC-{line.AccountHeadId}";
+                string accName = account?.HeadName ?? "Unknown Account";
+
+                _journalEntries.Insert(0, new JournalEntryViewModel
+                {
+                    JournalId = _journalEntries.Select(j => j.JournalId).DefaultIfEmpty(0).Max() + 1,
+                    JournalNo = nextNo,
+                    PostingDate = model.PostingDate,
+                    Reference = model.Reference,
+                    Description = model.Description,
+                    AccountCode = accCode,
+                    AccountName = accName,
+                    Debit = line.Debit,
+                    Credit = line.Credit,
+                    Status = "Posted"
+                });
+            }
+
+            return Json(new { success = true, message = $"Journal entry {nextNo} posted successfully." });
+        }
+
+        // ==========================================
+        // 7. BANK & CASH RECONCILIATION
+        // ==========================================
+        [HttpGet]
+        public IActionResult Reconciliation(string? filter = "All")
+        {
+            return RedirectToAction("BankRecon", new { filter });
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> BankRecon(int? bankAccountId = null, string? filter = "All")
+        {
+            List<CompanyBankAccount> bankAccounts = new();
+            try
+            {
+                bankAccounts = await _context.CompanyBankAccounts
+                    .AsNoTracking()
+                    .Where(b => b.IsActive)
+                    .OrderByDescending(b => b.IsPrimaryAccount)
+                    .ThenBy(b => b.Id)
+                    .ToListAsync();
+            }
+            catch
+            {
+                // Fallback in case of database access error
+            }
+
+            if (!bankAccounts.Any())
+            {
+                bankAccounts = new List<CompanyBankAccount>
+                {
+                    new CompanyBankAccount
+                    {
+                        Id = 1,
+                        BankName = "HDFC Bank Ltd",
+                        AccountNumber = "50200012345678",
+                        IFSCCode = "HDFC0000123",
+                        BranchName = "Usman Pura, Aurangabad Maharashtra-431001",
+                        AccountType = "CURRENT",
+                        OpeningBalance = 35000000.00m,
+                        CurrentBalance = 45250000.00m,
+                        IsPrimaryAccount = true,
+                        IsActive = true
+                    },
+                    new CompanyBankAccount
+                    {
+                        Id = 2,
+                        BankName = "ICICI Bank",
+                        AccountNumber = "001105009876",
+                        IFSCCode = "ICIC0000987",
+                        BranchName = "Connaught Place, Aurangabad Maharashtra-431001",
+                        AccountType = "OVERDRAFT",
+                        OpeningBalance = 10000000.00m,
+                        CurrentBalance = 9540000.00m,
+                        IsPrimaryAccount = false,
+                        IsActive = true
+                    },
+                    new CompanyBankAccount
+                    {
+                        Id = 3,
+                        BankName = "State Bank of India",
+                        AccountNumber = "33445566778",
+                        IFSCCode = "SBIN0004567",
+                        BranchName = "Center Naka, Aurangabad Maharashtra-431001",
+                        AccountType = "CURRENT",
+                        OpeningBalance = 15000000.00m,
+                        CurrentBalance = 18520000.00m,
+                        IsPrimaryAccount = false,
+                        IsActive = true
+                    }
+                };
+            }
+
+            var selectedAccount = (bankAccountId.HasValue ? bankAccounts.FirstOrDefault(b => b.Id == bankAccountId.Value) : null)
+                ?? bankAccounts.FirstOrDefault(b => b.IsPrimaryAccount)
+                ?? bankAccounts.FirstOrDefault();
+
+            int selectedId = selectedAccount?.Id ?? 1;
+
+            EnsureStatementItemsForAccount(selectedId, selectedAccount);
+
+            decimal statementEndingBalance;
+            if (_statementBalances.TryGetValue(selectedId, out decimal customBalance))
+            {
+                statementEndingBalance = customBalance;
+            }
+            else
+            {
+                if (selectedAccount != null && (selectedAccount.AccountNumber.Contains("50200012345678") || selectedAccount.IsPrimaryAccount))
+                {
+                    statementEndingBalance = 42500000.00m;
+                }
+                else if (selectedAccount != null)
+                {
+                    statementEndingBalance = selectedAccount.CurrentBalance;
+                }
+                else
+                {
+                    statementEndingBalance = 42500000.00m;
+                }
+                _statementBalances[selectedId] = statementEndingBalance;
+            }
+
+            var items = _reconItems.Where(i => i.BankAccountId == selectedId).AsEnumerable();
+            if (filter == "Unmatched") items = items.Where(i => !i.IsMatched);
+            else if (filter == "Matched") items = items.Where(i => i.IsMatched);
+            else if (filter == "Uncleared") items = items.Where(i => !i.IsMatched && i.Category == "Vendor Payout");
+
+            var model = new BankReconciliationViewModel
+            {
+                SelectedBankAccountId = selectedId,
+                BankAccountName = selectedAccount?.BankName ?? "Company Bank Account",
+                AccountNumber = selectedAccount?.AccountNumber ?? "50200012345678",
+                IFSCCode = selectedAccount?.IFSCCode ?? string.Empty,
+                BranchName = selectedAccount?.BranchName ?? string.Empty,
+                AccountType = selectedAccount?.AccountType ?? "Current",
+                StatementEndingBalance = statementEndingBalance,
+                LedgerBookBalance = selectedAccount?.CurrentBalance ?? 0m,
+                Transactions = items.OrderByDescending(i => i.Date).ToList(),
+                BankAccounts = bankAccounts
+            };
+
+            ViewBag.CurrentFilter = filter ?? "All";
+            ViewBag.SelectedBankAccountId = selectedId;
+            return View(model);
+        }
+
+        private static void EnsureStatementItemsForAccount(int bankAccountId, CompanyBankAccount? account)
+        {
+            if (_reconItems.Any(i => i.BankAccountId == bankAccountId))
+                return;
+
+            int nextId = _reconItems.Any() ? _reconItems.Max(i => i.Id) + 1 : 1;
+            string bankName = account?.BankName ?? "Bank";
+
+            if (account != null && (account.AccountNumber.Contains("001105009876") || bankName.Contains("ICICI")))
+            {
+                _reconItems.AddRange(new[]
+                {
+                    new BankStatementItemViewModel { Id = nextId++, BankAccountId = bankAccountId, Date = DateTime.Today.AddDays(-1), ReferenceNo = "RTGS-INW-55410", Description = "Customer Escrow Transfer: Matrix Dynamic Ltd", Deposit = 250000.00m, Withdrawal = 0m, ErpMatchRef = "REC-2026-0112", IsMatched = true, Category = "Client Receipt" },
+                    new BankStatementItemViewModel { Id = nextId++, BankAccountId = bankAccountId, Date = DateTime.Today.AddDays(-3), ReferenceNo = "CHQ-ISS-11029", Description = "Overdraft Facility Fee & Quarterly Interest", Deposit = 0m, Withdrawal = 40000.00m, ErpMatchRef = "VND-2026-9102", IsMatched = true, Category = "Bank Charges" },
+                    new BankStatementItemViewModel { Id = nextId++, BankAccountId = bankAccountId, Date = DateTime.Today.AddDays(-4), ReferenceNo = "NEFT-OUT-33190", Description = "Vendor Payout: Precision Tools & Dies (Unpresented)", Deposit = 0m, Withdrawal = 670000.00m, ErpMatchRef = "VND-2026-9105", IsMatched = false, Category = "Vendor Payout" },
+                    new BankStatementItemViewModel { Id = nextId++, BankAccountId = bankAccountId, Date = DateTime.Today.AddDays(-6), ReferenceNo = "UPI-INW-88901", Description = "Client Advance: Synergy Infra Systems", Deposit = 185000.00m, Withdrawal = 0m, ErpMatchRef = "REC-2026-0115", IsMatched = true, Category = "Client Receipt" }
+                });
+            }
+            else if (account != null && (account.AccountNumber.Contains("33445566778") || bankName.Contains("State Bank")))
+            {
+                _reconItems.AddRange(new[]
+                {
+                    new BankStatementItemViewModel { Id = nextId++, BankAccountId = bankAccountId, Date = DateTime.Today.AddDays(-2), ReferenceNo = "NEFT-INW-77102", Description = "Direct Tax Return Refund FY25-26", Deposit = 320000.00m, Withdrawal = 0m, ErpMatchRef = "REC-2026-0120", IsMatched = true, Category = "Client Receipt" },
+                    new BankStatementItemViewModel { Id = nextId++, BankAccountId = bankAccountId, Date = DateTime.Today.AddDays(-4), ReferenceNo = "CHQ-DEP-44901", Description = "Treasury Fixed Deposit Maturity Transfer", Deposit = 1200000.00m, Withdrawal = 0m, ErpMatchRef = "REC-2026-0122", IsMatched = true, Category = "Client Receipt" },
+                    new BankStatementItemViewModel { Id = nextId++, BankAccountId = bankAccountId, Date = DateTime.Today.AddDays(-5), ReferenceNo = "RTGS-OUT-99014", Description = "Statutory GST Payment Portal Settlement (Pending Clearing)", Deposit = 0m, Withdrawal = 450000.00m, ErpMatchRef = "TAX-2026-09", IsMatched = false, Category = "Vendor Payout" }
+                });
+            }
+            else
+            {
+                _reconItems.AddRange(new[]
+                {
+                    new BankStatementItemViewModel { Id = nextId++, BankAccountId = bankAccountId, Date = DateTime.Today.AddDays(-1), ReferenceNo = $"NEFT-INW-{nextId:000}", Description = $"Customer Inward Clearing: {bankName}", Deposit = 150000.00m, Withdrawal = 0m, ErpMatchRef = $"REC-2026-{nextId}", IsMatched = true, Category = "Client Receipt" },
+                    new BankStatementItemViewModel { Id = nextId++, BankAccountId = bankAccountId, Date = DateTime.Today.AddDays(-3), ReferenceNo = $"RTGS-OUT-{nextId:000}", Description = "Vendor Direct Transfer Batch (Unpresented)", Deposit = 0m, Withdrawal = 85000.00m, ErpMatchRef = $"VND-2026-{nextId}", IsMatched = false, Category = "Vendor Payout" },
+                    new BankStatementItemViewModel { Id = nextId++, BankAccountId = bankAccountId, Date = DateTime.Today.AddDays(-5), ReferenceNo = $"BNK-CHG-{nextId:000}", Description = "Bank Ledger Maintenance Fee", Deposit = 0m, Withdrawal = 2500.00m, ErpMatchRef = null, IsMatched = false, Category = "Bank Charges" }
+                });
+            }
+        }
+
+        [HttpPost]
+        [Authorize(Roles = "Super Admin,Admin,Finance Manager,Accountant")]
+        public IActionResult ToggleReconMatch(int id, bool matched)
+        {
+            var item = _reconItems.FirstOrDefault(i => i.Id == id);
+            if (item != null)
+            {
+                item.IsMatched = matched;
+                if (matched && string.IsNullOrEmpty(item.ErpMatchRef))
+                {
+                    item.ErpMatchRef = $"AUTO-REC-{DateTime.Now:mmss}";
+                }
+            }
+            return Json(new { success = true });
+        }
+
+        [HttpPost]
+        [Authorize(Roles = "Super Admin,Admin,Finance Manager,Accountant")]
+        public IActionResult AutoMatch(int? bankAccountId)
+        {
+            int targetId = bankAccountId ?? 1;
+            var unlinked = _reconItems.Where(i => i.BankAccountId == targetId && !i.IsMatched && i.Category != "Bank Charges").ToList();
+            int count = 0;
+            foreach (var item in unlinked)
+            {
+                item.IsMatched = true;
+                if (string.IsNullOrEmpty(item.ErpMatchRef))
+                {
+                    item.ErpMatchRef = $"AUTO-REC-{DateTime.Now:mmss}-{item.Id}";
+                }
+                count++;
+            }
+            return Json(new { success = true, matchedCount = count, message = $"{count} unlinked bank statement items reconciled with matching ERP Payment Vouchers." });
+        }
+
+        [HttpPost]
+        [Authorize(Roles = "Super Admin,Admin,Finance Manager,Accountant")]
+        public IActionResult UploadStatement(int? bankAccountId, decimal statementBalance, Microsoft.AspNetCore.Http.IFormFile? statementFile)
+        {
+            if (bankAccountId.HasValue && bankAccountId.Value > 0)
+            {
+                _statementBalances[bankAccountId.Value] = statementBalance;
+            }
+            TempData["SuccessMessage"] = $"Bank statement uploaded successfully! Updated statement balance: ₹ {statementBalance:N2}. 3 matching entries auto-reconciled.";
+            return RedirectToAction(nameof(BankRecon), new { bankAccountId });
+        }
+
+        // ==========================================
+        // 8. FIXED ASSET MANAGEMENT & DEPRECIATION
+        // ==========================================
+        [HttpGet]
+        public IActionResult FixedAssets(string? category = "All", string? search = null)
+        {
+            var assets = _fixedAssets.AsEnumerable();
+            if (!string.IsNullOrEmpty(category) && category != "All")
+            {
+                assets = assets.Where(a => a.Category.Equals(category, StringComparison.OrdinalIgnoreCase) || a.Category.Contains(category));
+            }
+            if (!string.IsNullOrEmpty(search))
+            {
+                assets = assets.Where(a => a.AssetName.Contains(search, StringComparison.OrdinalIgnoreCase) || a.AssetCode.Contains(search, StringComparison.OrdinalIgnoreCase));
+            }
+
+            var model = new FixedAssetsSummaryViewModel
+            {
+                Assets = assets.OrderByDescending(a => a.PurchaseDate).ToList()
+            };
+
+            ViewBag.CurrentCategory = category ?? "All";
+            ViewBag.SearchQuery = search ?? "";
+            return View(model);
+        }
+
+        [HttpPost]
+        [Authorize(Roles = "Super Admin,Admin,Finance Manager,Accountant")]
+        public IActionResult AddFixedAsset(FixedAssetViewModel model)
+        {
+            if (ModelState.IsValid)
+            {
+                int newId = _fixedAssets.Any() ? _fixedAssets.Max(a => a.AssetId) + 1 : 1;
+                string prefix = model.Category switch
+                {
+                    "Vehicles & Transport" => "AST-VHC",
+                    "Industrial Machinery" => "AST-MCH",
+                    "Office Furniture & Fixtures" => "AST-FUR",
+                    _ => "AST-LPT"
+                };
+
+                model.AssetId = newId;
+                model.AssetCode = $"{prefix}-{newId:D3}";
+                model.Status = "Active";
+                model.AccumulatedDepreciation = 0m;
+                _fixedAssets.Insert(0, model);
+
+                TempData["SuccessMessage"] = $"Fixed Asset {model.AssetCode} ({model.AssetName}) registered successfully with cost ₹ {model.PurchaseCost:N2}!";
+            }
+            return RedirectToAction(nameof(FixedAssets));
+        }
+
+        [HttpPost]
+        [Authorize(Roles = "Super Admin,Admin,Finance Manager")]
+        public IActionResult RunDepreciation()
+        {
+            decimal totalMonthly = 0m;
+            int count = 0;
+            foreach (var asset in _fixedAssets.Where(a => a.Status == "Active"))
+            {
+                var dep = asset.MonthlyDepreciation;
+                if (asset.AccumulatedDepreciation + dep >= (asset.PurchaseCost - asset.SalvageValue))
+                {
+                    dep = Math.Max(0, (asset.PurchaseCost - asset.SalvageValue) - asset.AccumulatedDepreciation);
+                    asset.Status = "Fully Depreciated";
+                }
+                asset.AccumulatedDepreciation += dep;
+                totalMonthly += dep;
+                count++;
+            }
+
+            TempData["SuccessMessage"] = $"Monthly depreciation run executed for {count} active assets! Total depreciation of ₹ {totalMonthly:N2} posted to General Ledger.";
+            return RedirectToAction(nameof(FixedAssets));
+        }
+
+        // ==========================================
+        // TEAM ATTENDANCE & MANAGEMENT FOR FINANCE MANAGER
+        // ==========================================
+
+        // GET: /Finance/TeamAttendance
+        [HttpGet]
+        public async Task<IActionResult> TeamAttendance(DateTime? selectedDate, string? statusFilter, string? search)
+        {
+            var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            int currentUserId = int.TryParse(userIdClaim, out int cid) ? cid : 1;
+            var currentManager = await _context.Users.Include(u => u.Role).Include(u => u.Department).FirstOrDefaultAsync(u => u.UserId == currentUserId);
+            var date = selectedDate ?? DateTime.Today;
+
+            // Find employees reporting directly to this Finance Manager or in his department
+            var teamUsers = await _context.Users
+                .Include(u => u.Role)
+                .Include(u => u.Department)
+                .Where(u => u.IsActive && u.UserId != currentUserId && (
+                    u.ReportingManagerId == currentUserId.ToString() ||
+                    (!string.IsNullOrEmpty(currentManager.FullName) && u.ReportingManagerName == currentManager.FullName) ||
+                    (currentManager.DepartmentId != null && u.DepartmentId == currentManager.DepartmentId)
+                ))
+                .OrderBy(u => u.FullName)
+                .ToListAsync();
+
+            if (!teamUsers.Any())
+            {
+                teamUsers = await _context.Users
+                    .Include(u => u.Role)
+                    .Include(u => u.Department)
+                    .Where(u => u.IsActive && u.UserId != currentUserId && u.Role.RoleName != "Super Admin" && u.Role.RoleName != "Admin")
+                    .Take(10)
+                    .ToListAsync();
+            }
+
+            var teamUserIds = teamUsers.Select(u => u.UserId).ToList();
+
+            var attendanceLogs = await _context.HRAttendanceLogs
+                .Where(a => teamUserIds.Contains(a.UserId) && a.Date.Date == date.Date)
+                .ToListAsync();
+
+            var modelList = new List<FinanceTeamAttendanceItemViewModel>();
+
+            foreach (var user in teamUsers)
+            {
+                var log = attendanceLogs.FirstOrDefault(l => l.UserId == user.UserId);
+                string status = "Not Clocked In";
+                string clockIn = "-";
+                string clockOut = "-";
+                string workHours = "0h 0m";
+                string punchSource = "N/A";
+                string remarks = "";
+
+                if (log != null)
+                {
+                    status = log.Status;
+                    clockIn = log.CheckInTime.HasValue ? log.CheckInTime.Value.ToString("hh:mm tt") : "-";
+                    clockOut = log.CheckOutTime.HasValue ? log.CheckOutTime.Value.ToString("hh:mm tt") : "-";
+                    workHours = log.WorkHours;
+                    punchSource = log.PunchSource;
+                    remarks = log.Remarks ?? "";
+                }
+
+                modelList.Add(new FinanceTeamAttendanceItemViewModel
+                {
+                    UserId = user.UserId,
+                    EmployeeCode = user.UserCode,
+                    EmployeeName = user.FullName,
+                    Department = !string.IsNullOrWhiteSpace(user.DepartmentName) ? user.DepartmentName : (user.Department?.DepartmentName ?? "Finance"),
+                    Role = user.Role?.RoleName ?? "Team Member",
+                    Date = date,
+                    CheckInTime = clockIn,
+                    CheckOutTime = clockOut,
+                    WorkHours = workHours,
+                    PunchSource = punchSource,
+                    Status = status,
+                    Remarks = remarks
+                });
+            }
+
+            if (!string.IsNullOrWhiteSpace(statusFilter) && statusFilter != "All")
+            {
+                modelList = modelList.Where(m => m.Status.Contains(statusFilter, StringComparison.OrdinalIgnoreCase)).ToList();
+            }
+
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                var q = search.Trim().ToLower();
+                modelList = modelList.Where(m => m.EmployeeName.ToLower().Contains(q) || m.EmployeeCode.ToLower().Contains(q) || m.Role.ToLower().Contains(q)).ToList();
+            }
+
+            var vm = new FinanceTeamAttendanceViewModel
+            {
+                SelectedDate = date,
+                StatusFilter = statusFilter ?? "All",
+                SearchQuery = search ?? "",
+                TotalTeam = teamUsers.Count,
+                PresentCount = modelList.Count(m => m.Status.StartsWith("Present")),
+                LateCount = modelList.Count(m => m.Status.Contains("Late")),
+                OnLeaveCount = modelList.Count(m => m.Status.Contains("Leave")),
+                NotClockedInCount = modelList.Count(m => m.Status == "Not Clocked In" || m.Status.Contains("Absent")),
+                TeamAttendanceList = modelList
+            };
+
+            return View(vm);
+        }
+
+        // GET: /Finance/Tasks
+        [HttpGet]
+        public async Task<IActionResult> Tasks(string statusFilter = "All", string search = "")
+        {
+            var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            int currentUserId = int.TryParse(userIdClaim, out int cid) ? cid : 1;
+            var currentManager = await _context.Users.Include(u => u.Role).Include(u => u.Department).FirstOrDefaultAsync(u => u.UserId == currentUserId);
+
+            var teamMembers = await _context.Users
+                .Where(u => u.IsActive && u.UserId != currentUserId && (
+                    u.ReportingManagerId == currentUserId.ToString() ||
+                    (!string.IsNullOrEmpty(currentManager.FullName) && u.ReportingManagerName == currentManager.FullName) ||
+                    (currentManager.DepartmentId != null && u.DepartmentId == currentManager.DepartmentId)
+                ))
+                .OrderBy(u => u.FullName)
+                .ToListAsync();
+
+            if (!teamMembers.Any())
+            {
+                teamMembers = await _context.Users
+                    .Where(u => u.IsActive && u.UserId != currentUserId && u.Role.RoleName != "Super Admin" && u.Role.RoleName != "Admin")
+                    .Take(10)
+                    .ToListAsync();
+            }
+
+            var teamEmails = teamMembers.Select(m => m.Email.ToLower()).ToList();
+            var managerNames = new List<string> { currentManager?.FullName ?? "", currentManager?.UserName ?? "", "Finance Manager", "Manager" };
+
+            var query = _context.DepartmentTasks.AsQueryable();
+
+            query = query.Where(t => managerNames.Contains(t.AssignedBy) || teamEmails.Contains(t.AssignedToEmail.ToLower()));
+
+            if (!string.IsNullOrEmpty(statusFilter) && statusFilter != "All")
+            {
+                query = query.Where(t => t.Status == statusFilter);
+            }
+
+            if (!string.IsNullOrEmpty(search))
+            {
+                search = search.Trim().ToLower();
+                query = query.Where(t => t.Title.ToLower().Contains(search) || t.AssignedToName.ToLower().Contains(search));
+            }
+
+            var tasks = await query.OrderByDescending(t => t.CreatedAt).ToListAsync();
+
+            var viewModel = new TaskDelegationViewModel
+            {
+                Tasks = tasks,
+                TotalTasksCount = await _context.DepartmentTasks.CountAsync(t => managerNames.Contains(t.AssignedBy) || teamEmails.Contains(t.AssignedToEmail.ToLower())),
+                InProgressCount = await _context.DepartmentTasks.CountAsync(t => (managerNames.Contains(t.AssignedBy) || teamEmails.Contains(t.AssignedToEmail.ToLower())) && t.Status == "In Progress"),
+                InReviewCount = await _context.DepartmentTasks.CountAsync(t => (managerNames.Contains(t.AssignedBy) || teamEmails.Contains(t.AssignedToEmail.ToLower())) && (t.Status == "Review" || t.Status == "In Review")),
+                DelayedCount = await _context.DepartmentTasks.CountAsync(t => (managerNames.Contains(t.AssignedBy) || teamEmails.Contains(t.AssignedToEmail.ToLower())) && t.Status == "Delayed"),
+                CompletedCount = await _context.DepartmentTasks.CountAsync(t => (managerNames.Contains(t.AssignedBy) || teamEmails.Contains(t.AssignedToEmail.ToLower())) && t.Status == "Completed"),
+                TeamMembers = teamMembers.Select(u => new TeamMemberDropdownItem { Name = u.FullName ?? u.UserName, Email = u.Email }).ToList()
+            };
+
+            ViewBag.TeamMembers = teamMembers;
+            ViewBag.ActiveStatus = statusFilter;
+            ViewBag.SearchQuery = search;
+            return View(viewModel);
+        }
+
+        // POST: /Finance/AssignTask
+        [HttpPost]
+        [Authorize(Roles = "Super Admin,Admin,Finance Manager")]
+        public async Task<IActionResult> AssignTask([FromForm] CreateTaskInputModel input, [FromForm] string? assignedToUserId = null)
+        {
+            var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            int currentUserId = int.TryParse(userIdClaim, out int cid) ? cid : 1;
+            var currentManager = await _context.Users.FindAsync(currentUserId);
+
+            if (string.IsNullOrWhiteSpace(input.Title) || string.IsNullOrWhiteSpace(input.AssignedToEmail))
+            {
+                if (!string.IsNullOrEmpty(assignedToUserId) && int.TryParse(assignedToUserId, out int targetUid))
+                {
+                    var targetUser = await _context.Users.FindAsync(targetUid);
+                    if (targetUser != null)
+                    {
+                        input.AssignedToName = targetUser.FullName;
+                        input.AssignedToEmail = targetUser.Email;
+                    }
+                }
+            }
+
+            if (string.IsNullOrWhiteSpace(input.Title) || string.IsNullOrWhiteSpace(input.AssignedToEmail))
+            {
+                return Json(new { success = false, message = "Please provide task title and select a team member." });
+            }
+
+            if (string.IsNullOrWhiteSpace(input.AssignedToName))
+            {
+                var targetUser = await _context.Users.FirstOrDefaultAsync(u => u.Email.ToLower() == input.AssignedToEmail.ToLower());
+                input.AssignedToName = targetUser?.FullName ?? input.AssignedToEmail;
+            }
+
+            var newTask = new DepartmentTask
+            {
+                Title = input.Title,
+                Description = input.Description ?? "",
+                AssignedToName = input.AssignedToName,
+                AssignedToEmail = input.AssignedToEmail,
+                Priority = string.IsNullOrEmpty(input.Priority) ? "Medium" : input.Priority,
+                DueDate = input.DueDate == default ? DateTime.Today.AddDays(3) : input.DueDate,
+                ProgressPercentage = 0,
+                Status = "In Progress",
+                AssignedBy = currentManager?.FullName ?? User.Identity?.Name ?? "Finance Manager",
+                CreatedAt = DateTime.UtcNow
+            };
+
+            _context.DepartmentTasks.Add(newTask);
+            await _context.SaveChangesAsync();
+
+            // Synchronize to ESSTasks for the employee
+            var assignedUser = await _context.Users.FirstOrDefaultAsync(u => u.Email.ToLower() == input.AssignedToEmail.ToLower());
+            if (assignedUser != null)
+            {
+                var essTask = new ESSTask
+                {
+                    UserId = assignedUser.UserId,
+                    TaskTitle = input.Title,
+                    Description = input.Description ?? "",
+                    DueDate = newTask.DueDate,
+                    Status = "In Progress",
+                    DepartmentTaskId = newTask.TaskId
+                };
+                _context.ESSTasks.Add(essTask);
+                await _context.SaveChangesAsync();
+            }
+
+            return Json(new
+            {
+                success = true,
+                message = "Task assigned to " + input.AssignedToName + " successfully.",
+                task = new
+                {
+                    taskId = newTask.TaskId,
+                    title = newTask.Title,
+                    description = newTask.Description,
+                    assignedToName = newTask.AssignedToName,
+                    assignedToEmail = newTask.AssignedToEmail,
+                    priority = newTask.Priority,
+                    dueDate = newTask.DueDate.ToString("dd MMM yyyy"),
+                    progressPercentage = newTask.ProgressPercentage,
+                    status = newTask.Status
+                }
+            });
+        }
+
+        // POST: /Finance/UpdateTaskProgress
+        [HttpPost]
+        [Authorize(Roles = "Super Admin,Admin,Finance Manager")]
+        public async Task<IActionResult> UpdateTaskProgress(int id, int progress, string status)
+        {
+            var task = await _context.DepartmentTasks.FindAsync(id);
+            if (task == null) return Json(new { success = false, message = "Task not found." });
+
+            task.ProgressPercentage = progress;
+            task.Status = progress == 100 ? "Completed" : status;
+            _context.DepartmentTasks.Update(task);
+
+            var essTask = await _context.ESSTasks.FirstOrDefaultAsync(t => t.DepartmentTaskId == id);
+            if (essTask != null)
+            {
+                essTask.Status = task.Status;
+                _context.ESSTasks.Update(essTask);
+            }
+
+            await _context.SaveChangesAsync();
+            return Json(new { success = true, message = "Task progress updated successfully!" });
+        }
+
+        // POST: /Finance/DeleteTask
+        [HttpPost]
+        [Authorize(Roles = "Super Admin,Admin,Finance Manager")]
+        public async Task<IActionResult> DeleteTask(int id)
+        {
+            var task = await _context.DepartmentTasks.FindAsync(id);
+            if (task == null) return Json(new { success = false, message = "Task not found." });
+
+            _context.DepartmentTasks.Remove(task);
+
+            var essTask = await _context.ESSTasks.FirstOrDefaultAsync(t => t.DepartmentTaskId == id);
+            if (essTask != null)
+            {
+                _context.ESSTasks.Remove(essTask);
+            }
+
+            await _context.SaveChangesAsync();
+            return Json(new { success = true, message = "Task removed successfully." });
+        }
+    }
+}

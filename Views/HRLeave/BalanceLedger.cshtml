@@ -1,0 +1,277 @@
+﻿@model IEnumerable<ERP_System.Models.UserLeaveBalanceViewModel>
+@{
+    Layout = "_DashboardLayout";
+    ViewData["Title"] = "Leave Balance Ledger";
+
+    var departments = ViewBag.Departments as List<ERP_System.Models.Department> ?? new List<ERP_System.Models.Department>();
+    string currentFinYear = ViewBag.SelectedFinancialYear as string ?? "2026-2027";
+    int? currentDeptId = ViewBag.SelectedDepartmentId as int?;
+
+    var totalStaff = ViewBag.TotalStaff ?? Model?.Count() ?? 0;
+    var totalAllocated = ViewBag.TotalAllocated ?? Model?.Sum(m => m.TotalEntitled) ?? 0;
+    var totalTaken = ViewBag.TotalTaken ?? Model?.Sum(m => m.TotalTaken) ?? 0;
+    var totalAvailable = ViewBag.TotalAvailable ?? Model?.Sum(m => m.TotalBalance) ?? 0;
+}
+
+<style>
+    /* =====================================================
+       LEAVE BALANCE LEDGER - PREMIUM UI
+       ===================================================== */
+    .leave-ledger-page {
+        animation: ledgerPageEnter .6s cubic-bezier(.2,.8,.2,1) both;
+    }
+
+    @@keyframes ledgerPageEnter {
+        from {
+            opacity: 0;
+            transform: translateY(18px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    .ledger-title-icon {
+        width: 44px;
+        height: 44px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 14px;
+        background: rgba(13, 110, 253, 0.10);
+        color: var(--bs-primary);
+    }
+
+    .ledger-summary-card {
+        border-radius: 16px;
+        border: 1px solid #edf0f5;
+        transition: transform .28s ease, box-shadow .28s ease;
+    }
+
+    .ledger-summary-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 16px 35px rgba(30, 41, 59, .08) !important;
+    }
+
+    .balance-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        font-size: 0.76rem;
+        padding: 3px 8px;
+        border-radius: 6px;
+    }
+</style>
+
+<div class="container-fluid py-4 text-start leave-ledger-page">
+
+    <!-- Header -->
+    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
+        <div class="d-flex align-items-center gap-3">
+            <div class="ledger-title-icon">
+                <i class="fa-solid fa-scale-balanced"></i>
+            </div>
+            <div>
+                <h4 class="fw-bold mb-1 text-dark">Leave Balance Ledger</h4>
+                <nav aria-label="breadcrumb">
+                    <ol class="breadcrumb mb-0 small">
+                        <li class="breadcrumb-item"><a href="/HR" class="text-decoration-none">HR Dashboard</a></li>
+                        <li class="breadcrumb-item active" aria-current="page">Leave Balance Ledger</li>
+                    </ol>
+                </nav>
+            </div>
+        </div>
+
+        <div class="d-flex align-items-center gap-2">
+            <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-3 py-2 rounded-pill">
+                <i class="fa-regular fa-calendar-check me-1"></i> FY @currentFinYear Active Cycle
+            </span>
+        </div>
+    </div>
+
+    <!-- Summary Statistics -->
+    <div class="row g-3 mb-4">
+        <div class="col-12 col-sm-6 col-xl-3">
+            <div class="card bg-white p-3 shadow-sm ledger-summary-card border-start border-4 border-primary">
+                <div class="d-flex align-items-center justify-content-between">
+                    <div>
+                        <div class="text-muted fw-semibold small text-uppercase">Tracked Staff</div>
+                        <h3 class="fw-bold text-dark mb-0 mt-1">@totalStaff</h3>
+                    </div>
+                    <div class="rounded-circle bg-primary bg-opacity-10 text-primary p-3">
+                        <i class="fa-solid fa-users fa-lg"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12 col-sm-6 col-xl-3">
+            <div class="card bg-white p-3 shadow-sm ledger-summary-card border-start border-4 border-info">
+                <div class="d-flex align-items-center justify-content-between">
+                    <div>
+                        <div class="text-muted fw-semibold small text-uppercase">Total Leaves Allocated</div>
+                        <h3 class="fw-bold text-dark mb-0 mt-1">@totalAllocated Days</h3>
+                    </div>
+                    <div class="rounded-circle bg-info bg-opacity-10 text-info p-3">
+                        <i class="fa-solid fa-calendar-plus fa-lg"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12 col-sm-6 col-xl-3">
+            <div class="card bg-white p-3 shadow-sm ledger-summary-card border-start border-4 border-warning">
+                <div class="d-flex align-items-center justify-content-between">
+                    <div>
+                        <div class="text-muted fw-semibold small text-uppercase">Total Leaves Utilized</div>
+                        <h3 class="fw-bold text-dark mb-0 mt-1">@totalTaken Days</h3>
+                    </div>
+                    <div class="rounded-circle bg-warning bg-opacity-10 text-warning p-3">
+                        <i class="fa-solid fa-calendar-minus fa-lg"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12 col-sm-6 col-xl-3">
+            <div class="card bg-white p-3 shadow-sm ledger-summary-card border-start border-4 border-success">
+                <div class="d-flex align-items-center justify-content-between">
+                    <div>
+                        <div class="text-muted fw-semibold small text-uppercase">Remaining Balance</div>
+                        <h3 class="fw-bold text-dark mb-0 mt-1">@totalAvailable Days</h3>
+                    </div>
+                    <div class="rounded-circle bg-success bg-opacity-10 text-success p-3">
+                        <i class="fa-solid fa-wallet fa-lg"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Department & Financial Year Filter Panel -->
+    <div class="card bg-white border-0 shadow-sm rounded-3 p-3 mb-4">
+        <form method="get" asp-action="BalanceLedger" id="ledgerFilterForm" class="row g-3 align-items-end">
+            <div class="col-12 col-md-5">
+                <label class="form-label small fw-bold text-secondary mb-1">Financial Year Cycle</label>
+                <select name="financialYear" class="form-select form-select-sm" onchange="document.getElementById('ledgerFilterForm').submit()">
+                    <option value="2026-2027" selected="@(currentFinYear == "2026-2027")">Financial Year 2026 - 2027 (Current)</option>
+                    <option value="2025-2026" selected="@(currentFinYear == "2025-2026")">Financial Year 2025 - 2026 (Previous)</option>
+                    <option value="2024-2025" selected="@(currentFinYear == "2024-2025")">Financial Year 2024 - 2025 (Historical)</option>
+                </select>
+            </div>
+
+            <div class="col-12 col-md-5">
+                <label class="form-label small fw-bold text-secondary mb-1">Filter by Department</label>
+                <select name="departmentId" class="form-select form-select-sm" onchange="document.getElementById('ledgerFilterForm').submit()">
+                    <option value="">All Departments (Enterprise-wide)</option>
+                    @foreach (var dept in departments)
+                    {
+                        <option value="@dept.DepartmentId" selected="@(currentDeptId == dept.DepartmentId)">
+                            @dept.DepartmentName
+                        </option>
+                    }
+                </select>
+            </div>
+
+            <div class="col-12 col-md-2">
+                <button type="submit" class="btn btn-primary btn-sm rounded-pill w-100">
+                    <i class="fa-solid fa-arrows-rotate me-1"></i> Refresh
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Ledger Table -->
+    <div class="card bg-white border-0 shadow-sm rounded-3 p-4">
+        <div class="d-flex justify-content-between align-items-center mb-3 pb-2 border-bottom">
+            <div>
+                <h6 class="fw-bold mb-1 text-dark">
+                    <i class="fa-solid fa-table-list text-primary me-2"></i>Employee Entitlement & Utilization Ledger
+                </h6>
+                <div class="small text-muted">Accruals, utilized leaves, and available balance per leave category.</div>
+            </div>
+            <span class="badge bg-light text-dark border rounded-pill px-3 py-2">
+                @Model?.Count() Employees Tracked
+            </span>
+        </div>
+
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0" style="font-size: 0.85rem;">
+                <thead class="table-light">
+                    <tr>
+                        <th>Employee</th>
+                        <th>Department</th>
+                        <th class="text-center">Casual Leave (CL)<br/><small class="text-muted fw-normal">Alloc / Taken / Bal</small></th>
+                        <th class="text-center">Sick Leave (SL)<br/><small class="text-muted fw-normal">Alloc / Taken / Bal</small></th>
+                        <th class="text-center">Earned Leave (EL)<br/><small class="text-muted fw-normal">Alloc / Taken / Bal</small></th>
+                        <th class="text-center">Total Entitled</th>
+                        <th class="text-center">Total Taken</th>
+                        <th class="text-center">Total Balance</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (Model != null && Model.Any())
+                    {
+                        foreach (var emp in Model)
+                        {
+                            <tr>
+                                <td>
+                                    <div class="d-flex align-items-center gap-2">
+                                        <div class="rounded-circle bg-primary bg-opacity-10 text-primary d-flex align-items-center justify-content-center" style="width: 32px; height: 32px; min-width: 32px;">
+                                            <i class="fa-solid fa-user"></i>
+                                        </div>
+                                        <div>
+                                            <div class="fw-bold text-dark">@emp.FullName</div>
+                                            <small class="text-muted font-monospace">@emp.EmployeeCode</small>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>
+                                    <span class="badge bg-light text-secondary border rounded-pill px-2.5 py-1">
+                                        @emp.DepartmentName
+                                    </span>
+                                </td>
+                                <td class="text-center">
+                                    <span class="balance-pill bg-light border text-dark">@emp.CasualLeaveAllowed</span> /
+                                    <span class="balance-pill bg-warning-subtle text-warning-emphasis">@emp.CasualLeaveTaken</span> /
+                                    <span class="balance-pill bg-success-subtle text-success fw-bold">@emp.CasualLeaveBalance</span>
+                                </td>
+                                <td class="text-center">
+                                    <span class="balance-pill bg-light border text-dark">@emp.SickLeaveAllowed</span> /
+                                    <span class="balance-pill bg-warning-subtle text-warning-emphasis">@emp.SickLeaveTaken</span> /
+                                    <span class="balance-pill bg-success-subtle text-success fw-bold">@emp.SickLeaveBalance</span>
+                                </td>
+                                <td class="text-center">
+                                    <span class="balance-pill bg-light border text-dark">@emp.EarnedLeaveAllowed</span> /
+                                    <span class="balance-pill bg-warning-subtle text-warning-emphasis">@emp.EarnedLeaveTaken</span> /
+                                    <span class="balance-pill bg-success-subtle text-success fw-bold">@emp.EarnedLeaveBalance</span>
+                                </td>
+                                <td class="text-center fw-bold text-dark">
+                                    @emp.TotalEntitled Days
+                                </td>
+                                <td class="text-center text-danger fw-semibold">
+                                    @emp.TotalTaken Days
+                                </td>
+                                <td class="text-center">
+                                    <span class="badge bg-success text-white rounded-pill px-2.5 py-1.5 fw-bold">
+                                        @emp.TotalBalance Days
+                                    </span>
+                                </td>
+                            </tr>
+                        }
+                    }
+                    else
+                    {
+                        <tr>
+                            <td colspan="8" class="text-center text-muted py-5">
+                                <i class="fa-solid fa-folder-open fa-2x mb-2 text-secondary opacity-50"></i>
+                                <div>No employee leave ledger records found for this department and financial year.</div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

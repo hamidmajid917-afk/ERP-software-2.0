@@ -1,0 +1,1802 @@
+@model ERP_System.Models.EmployeeDashboardViewModel
+
+@{
+    Layout = "_DashboardLayout";
+    ViewData["Title"] = "Employee Portal";
+
+    var currentUser = Model.CurrentUser;
+    var activityLogs = Model.ActivityLogs;
+    var transactions = Model.Transactions;
+    var inCulture = new System.Globalization.CultureInfo("en-IN");
+}
+
+<style>
+    /* =========================================================
+       EMPLOYEE PORTAL
+       PREMIUM FULL-WIDTH ESS DESIGN
+       ========================================================= */
+
+    .employee-portal {
+        position: relative;
+        min-height: calc(100vh - 70px);
+        padding: 26px 0 45px;
+        color: #182233;
+        animation: portalFadeIn 0.55s ease both;
+    }
+
+    .employee-portal::before {
+        content: "";
+        position: fixed;
+        width: 420px;
+        height: 420px;
+        right: -220px;
+        top: 80px;
+        border-radius: 50%;
+        background: radial-gradient(circle, rgba(13, 110, 253, 0.055), transparent 68%);
+        pointer-events: none;
+        z-index: 0;
+    }
+
+    .employee-portal::after {
+        content: "";
+        position: fixed;
+        width: 360px;
+        height: 360px;
+        left: -200px;
+        bottom: 60px;
+        border-radius: 50%;
+        background: radial-gradient(circle, rgba(79, 70, 229, 0.035), transparent 70%);
+        pointer-events: none;
+        z-index: 0;
+    }
+
+    .portal-content {
+        position: relative;
+        z-index: 1;
+    }
+
+    /* =========================================================
+       ANIMATIONS
+       ========================================================= */
+
+    @@keyframes portalFadeIn {
+        from {
+            opacity: 0;
+            transform: translateY(12px);
+        }
+
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    @@keyframes bannerSlide {
+        from {
+            opacity: 0;
+            transform: translateY(-10px);
+        }
+
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    @@keyframes sectionRise {
+        from {
+            opacity: 0;
+            transform: translateY(15px);
+        }
+
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    @@keyframes avatarFloat {
+        0%, 100% {
+            transform: translateY(0);
+        }
+
+        50% {
+            transform: translateY(-4px);
+        }
+    }
+
+    @@keyframes statusPulse {
+        0%, 100% {
+            box-shadow: 0 0 0 0 rgba(32, 164, 100, 0.18);
+        }
+
+        50% {
+            box-shadow: 0 0 0 5px rgba(32, 164, 100, 0.05);
+        }
+    }
+
+    /* =========================================================
+       WELCOME HEADER
+       ========================================================= */
+
+    .welcome-banner {
+        position: relative;
+        overflow: hidden;
+        background: linear-gradient(135deg, #ffffff 0%, #f8fbff 55%, #f4f8ff 100%);
+        border: 1px solid #e7edf6;
+        border-radius: 20px;
+        padding: 25px 27px;
+        margin-bottom: 20px;
+        box-shadow: 0 10px 34px rgba(15, 23, 42, 0.055);
+        animation: bannerSlide 0.65s ease both;
+    }
+
+    .welcome-banner::before {
+        content: "";
+        position: absolute;
+        width: 260px;
+        height: 260px;
+        right: -100px;
+        top: -150px;
+        border-radius: 50%;
+        background: rgba(13, 110, 253, 0.055);
+        pointer-events: none;
+    }
+
+    .welcome-banner::after {
+        content: "";
+        position: absolute;
+        width: 140px;
+        height: 140px;
+        right: 180px;
+        bottom: -95px;
+        border-radius: 50%;
+        background: rgba(13, 110, 253, 0.035);
+        pointer-events: none;
+    }
+
+    .welcome-content {
+        position: relative;
+        z-index: 2;
+    }
+
+    .employee-avatar {
+        width: 60px;
+        height: 60px;
+        min-width: 60px;
+        border-radius: 17px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: linear-gradient(135deg, #0d6efd, #4f8dfd);
+        color: #ffffff;
+        font-size: 1.45rem;
+        font-weight: 800;
+        box-shadow: 0 10px 25px rgba(13, 110, 253, 0.22);
+        animation: avatarFloat 3.2s ease-in-out infinite;
+    }
+
+    .welcome-title {
+        color: #172033;
+        font-size: 1.3rem;
+        font-weight: 800;
+        letter-spacing: -0.025em;
+        margin: 0 0 5px;
+    }
+
+    .welcome-subtitle {
+        color: #7b8799;
+        font-size: 0.78rem;
+        margin: 0;
+    }
+
+    .portal-status {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        background: #ecfdf3;
+        color: #16834d;
+        border: 1px solid #d6f4e2;
+        border-radius: 30px;
+        padding: 7px 12px;
+        font-size: 0.7rem;
+        font-weight: 750;
+        white-space: nowrap;
+    }
+
+    .portal-status-dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: #20a464;
+        animation: statusPulse 2s infinite;
+    }
+
+    .attendance-action {
+        transition: transform 0.22s ease, box-shadow 0.22s ease;
+    }
+
+    .attendance-action:hover {
+        transform: translateY(-2px);
+    }
+
+    /* =========================================================
+       COMMON FULL-WIDTH SECTION
+       ========================================================= */
+
+    .portal-section {
+        width: 100%;
+        margin-bottom: 20px;
+        animation: sectionRise 0.65s ease both;
+    }
+
+    .portal-section:nth-child(2) {
+        animation-delay: 0.06s;
+    }
+
+    .portal-section:nth-child(3) {
+        animation-delay: 0.12s;
+    }
+
+    .portal-section:nth-child(4) {
+        animation-delay: 0.18s;
+    }
+
+    .portal-section:nth-child(5) {
+        animation-delay: 0.24s;
+    }
+
+    .emp-card {
+        width: 100%;
+        background: #ffffff;
+        border: 1px solid #e8edf4;
+        border-radius: 18px;
+        box-shadow: 0 9px 30px rgba(15, 23, 42, 0.048);
+        overflow: hidden;
+        transition: transform 0.25s ease,
+                    box-shadow 0.25s ease,
+                    border-color 0.25s ease;
+    }
+
+    .emp-card:hover {
+        border-color: #dce5f1;
+        box-shadow: 0 15px 38px rgba(15, 23, 42, 0.07);
+    }
+
+    /* =========================================================
+       SECTION HEADER
+       ========================================================= */
+
+    .section-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 15px;
+        padding: 20px 23px;
+        background: linear-gradient(180deg, #ffffff 0%, #fbfcfe 100%);
+        border-bottom: 1px solid #edf0f4;
+    }
+
+    .section-heading {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        min-width: 0;
+    }
+
+    .section-icon {
+        width: 41px;
+        height: 41px;
+        min-width: 41px;
+        border-radius: 12px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: #eef5ff;
+        color: #0d6efd;
+        font-size: 15px;
+        transition: transform 0.25s ease, background 0.25s ease;
+    }
+
+    .emp-card:hover .section-icon {
+        transform: scale(1.05);
+        background: #e7f0ff;
+    }
+
+    .section-title {
+        color: #202939;
+        font-size: 1rem;
+        font-weight: 800;
+        margin: 0;
+        letter-spacing: -0.01em;
+    }
+
+    .section-subtitle {
+        color: #929baa;
+        font-size: 0.7rem;
+        margin: 3px 0 0;
+    }
+
+    .section-counter {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 7px 11px;
+        border-radius: 999px;
+        background: #f5f7fa;
+        border: 1px solid #e9edf2;
+        color: #657185;
+        font-size: 0.68rem;
+        font-weight: 700;
+        white-space: nowrap;
+    }
+
+    .section-counter i {
+        color: #0d6efd;
+        font-size: 0.65rem;
+    }
+
+    /* =========================================================
+       PROFILE SUMMARY
+       ========================================================= */
+
+    .profile-content {
+        padding: 20px 23px 22px;
+    }
+
+    .profile-details {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0 35px;
+    }
+
+    .profile-row {
+        min-height: 62px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 20px;
+        padding: 13px 4px;
+        border-bottom: 1px solid #f0f2f5;
+        transition: background 0.2s ease,
+                    padding-left 0.2s ease,
+                    padding-right 0.2s ease;
+    }
+
+    .profile-row:hover {
+        background: #fafcff;
+        padding-left: 9px;
+        padding-right: 9px;
+        border-radius: 9px;
+    }
+
+    .profile-row:nth-last-child(-n+2) {
+        border-bottom: 0;
+    }
+
+    .profile-label {
+        color: #8a94a6;
+        font-size: 0.68rem;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.045em;
+        white-space: nowrap;
+    }
+
+    .profile-value {
+        color: #273244;
+        font-size: 0.78rem;
+        font-weight: 650;
+        text-align: right;
+        word-break: break-word;
+    }
+
+    .employee-code {
+        color: #0d6efd;
+        background: #f0f6ff;
+        border: 1px solid #dfebff;
+        border-radius: 8px;
+        padding: 5px 9px;
+        font-size: 0.72rem;
+        font-weight: 800;
+    }
+
+    .role-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        background: #f8fafc;
+        color: #475569;
+        border: 1px solid #e5e9ef !important;
+        border-radius: 8px;
+        padding: 6px 9px;
+        font-size: 0.69rem;
+        font-weight: 750;
+    }
+
+    .role-badge i {
+        color: #0d6efd !important;
+    }
+
+    .badge-active {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        background: #ecfdf3;
+        color: #16834d;
+        border: 1px solid #d4f3e0;
+        font-size: 0.69rem;
+        font-weight: 750;
+        border-radius: 999px;
+        padding: 6px 10px;
+    }
+
+    .badge-active::before {
+        content: "";
+        width: 6px;
+        height: 6px;
+        background: #20a464;
+        border-radius: 50%;
+    }
+
+    .attendance-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        max-width: 100%;
+        text-align: right;
+        line-height: 1.4;
+    }
+
+    /* =========================================================
+       OPERATIONS BULLETIN
+       ========================================================= */
+
+    .activity-content {
+        padding: 6px 23px 18px;
+    }
+
+    .activity-list-emp {
+        display: flex;
+        flex-direction: column;
+        width: 100%;
+    }
+
+    .activity-item-emp {
+        position: relative;
+        display: flex;
+        align-items: flex-start;
+        gap: 14px;
+        width: 100%;
+        padding: 16px 7px;
+        border-bottom: 1px solid #f0f2f5;
+        border-radius: 10px;
+        transition: background 0.22s ease,
+                    transform 0.22s ease,
+                    padding-left 0.22s ease;
+    }
+
+    .activity-item-emp:first-child {
+        padding-top: 13px;
+    }
+
+    .activity-item-emp:last-child {
+        border-bottom: 0;
+        padding-bottom: 7px;
+    }
+
+    .activity-item-emp:hover {
+        background: #f9fbff;
+        transform: translateX(3px);
+        padding-left: 11px;
+    }
+
+    .activity-icon-emp {
+        width: 39px;
+        height: 39px;
+        min-width: 39px;
+        border-radius: 11px;
+        background: #f1f5ff;
+        color: #0d6efd;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.87rem;
+        flex-shrink: 0;
+        transition: transform 0.25s ease;
+    }
+
+    .activity-item-emp:hover .activity-icon-emp {
+        transform: scale(1.08);
+    }
+
+    .activity-title {
+        color: #273244;
+        font-size: 0.8rem;
+        font-weight: 750;
+        margin-bottom: 4px;
+    }
+
+    .activity-description {
+        color: #7c8798;
+        font-size: 0.74rem;
+        line-height: 1.5;
+        max-width: 950px;
+    }
+
+    .activity-time {
+        color: #a0a8b5;
+        font-size: 0.68rem;
+        white-space: nowrap;
+        padding-top: 3px;
+        margin-left: auto;
+    }
+
+    /* =========================================================
+       LEDGER + PAYSLIP TABLES
+       ========================================================= */
+
+    .table-content {
+        width: 100%;
+    }
+
+    .table-responsive {
+        scrollbar-width: thin;
+    }
+
+    .table-emp {
+        width: 100%;
+        min-width: 720px;
+        margin-bottom: 0 !important;
+        border-collapse: separate;
+        border-spacing: 0;
+    }
+
+    .table-emp th {
+        background: #f8fafc !important;
+        color: #738095;
+        font-size: 0.67rem;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.045em;
+        border-bottom: 1px solid #e9edf3 !important;
+        padding: 14px 19px;
+        white-space: nowrap;
+        vertical-align: middle;
+    }
+
+    .table-emp td {
+        color: #526071;
+        font-size: 0.76rem;
+        border-bottom: 1px solid #f0f2f5;
+        padding: 15px 19px;
+        vertical-align: middle;
+        background: #ffffff;
+        transition: background 0.2s ease;
+    }
+
+    .table-emp tbody tr {
+        transition: transform 0.2s ease;
+    }
+
+    .table-emp tbody tr:hover td {
+        background: #f9fbff;
+    }
+
+    .table-emp tbody tr:last-child td {
+        border-bottom: 0;
+    }
+
+    /* =========================================================
+       TRANSACTION DETAILS
+       ========================================================= */
+
+    .transaction-type {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        color: #526071;
+        font-weight: 650;
+    }
+
+    .transaction-type::before {
+        content: "";
+        width: 6px;
+        height: 6px;
+        min-width: 6px;
+        border-radius: 50%;
+        background: #94a3b8;
+    }
+
+    .transaction-number {
+        color: #0d6efd;
+        font-weight: 800;
+        font-size: 0.75rem;
+        background: #f5f9ff;
+        padding: 4px 7px;
+        border-radius: 6px;
+    }
+
+    .amount-value {
+        color: #263244;
+        font-weight: 800;
+        white-space: nowrap;
+    }
+
+    .salary-value {
+        color: #16834d;
+        font-weight: 800;
+        white-space: nowrap;
+    }
+
+    /* =========================================================
+       STATUS PILLS
+       ========================================================= */
+
+    .status-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        border-radius: 30px;
+        padding: 6px 10px;
+        font-size: 0.66rem;
+        font-weight: 750;
+        white-space: nowrap;
+    }
+
+    .status-paid {
+        background: #ecfdf3;
+        color: #16834d;
+        border: 1px solid #d5f3e1;
+    }
+
+    .status-paid::before {
+        content: "";
+        width: 5px;
+        height: 5px;
+        border-radius: 50%;
+        background: #22c55e;
+    }
+
+    .status-pending {
+        background: #fff8e7;
+        color: #a66b00;
+        border: 1px solid #ffedbd;
+    }
+
+    .status-pending::before {
+        content: "";
+        width: 5px;
+        height: 5px;
+        border-radius: 50%;
+        background: #f59e0b;
+    }
+
+    /* =========================================================
+       PAYSLIP BUTTON
+       ========================================================= */
+
+    .print-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        min-width: 86px;
+        border-radius: 8px;
+        font-size: 0.69rem;
+        font-weight: 700;
+        border: 1px solid #dce2e9;
+        color: #596579;
+        background: #ffffff;
+        transition: all 0.22s ease;
+    }
+
+    .print-btn:hover {
+        color: #0d6efd;
+        border-color: #b9d2fa;
+        background: #f5f9ff;
+        transform: translateY(-2px);
+        box-shadow: 0 5px 12px rgba(13, 110, 253, 0.08);
+    }
+
+    /* =========================================================
+       EMPTY STATES
+       ========================================================= */
+
+    .empty-message {
+        width: 100%;
+        text-align: center;
+        padding: 40px 15px;
+        color: #98a2b3;
+        font-size: 0.76rem;
+    }
+
+    .empty-message-icon {
+        width: 50px;
+        height: 50px;
+        margin: 0 auto 11px;
+        border-radius: 14px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #f6f8fa;
+        color: #9ba5b3;
+        font-size: 17px;
+    }
+
+    .empty-message-title {
+        color: #566174;
+        font-weight: 750;
+        margin-bottom: 3px;
+    }
+
+    /* =========================================================
+       RESPONSIVE - LARGE TABLET
+       ========================================================= */
+
+    @@media (max-width: 1199.98px) {
+
+        .welcome-banner {
+            padding: 23px;
+        }
+
+        .profile-details {
+            gap: 0 20px;
+        }
+
+        .profile-row {
+            gap: 12px;
+        }
+
+        .table-emp th,
+        .table-emp td {
+            padding-left: 16px;
+            padding-right: 16px;
+        }
+    }
+
+    /* =========================================================
+       RESPONSIVE - TABLET
+       ========================================================= */
+
+    @@media (max-width: 991.98px) {
+
+        .employee-portal {
+            padding-top: 20px;
+        }
+
+        .welcome-banner {
+            border-radius: 17px;
+        }
+
+        .welcome-title {
+            font-size: 1.18rem;
+        }
+
+        .profile-details {
+            grid-template-columns: 1fr;
+        }
+
+        .profile-row:nth-last-child(-n+2) {
+            border-bottom: 1px solid #f0f2f5;
+        }
+
+        .profile-row:last-child {
+            border-bottom: 0;
+        }
+
+        .section-header {
+            padding: 18px 19px;
+        }
+
+        .profile-content {
+            padding: 18px 19px 20px;
+        }
+
+        .activity-content {
+            padding-left: 19px;
+            padding-right: 19px;
+        }
+    }
+
+    /* =========================================================
+       RESPONSIVE - MOBILE
+       ========================================================= */
+
+    @@media (max-width: 767.98px) {
+
+        .employee-portal {
+            padding: 15px 1px 30px;
+        }
+
+        .welcome-banner {
+            padding: 18px;
+            border-radius: 15px;
+            margin-bottom: 15px;
+        }
+
+        .welcome-content {
+            flex-wrap: wrap;
+            align-items: flex-start !important;
+        }
+
+        .employee-avatar {
+            width: 50px;
+            height: 50px;
+            min-width: 50px;
+            border-radius: 14px;
+            font-size: 1.2rem;
+        }
+
+        .welcome-title {
+            font-size: 1rem;
+        }
+
+        .welcome-subtitle {
+            font-size: 0.69rem;
+        }
+
+        .portal-status {
+            width: fit-content;
+            margin-left: 0;
+        }
+
+        .attendance-action {
+            width: 100%;
+        }
+
+        .attendance-action button,
+        .attendance-action span {
+            width: 100%;
+            justify-content: center;
+        }
+
+        .portal-section {
+            margin-bottom: 15px;
+        }
+
+        .emp-card {
+            border-radius: 15px;
+        }
+
+        .section-header {
+            padding: 16px;
+            align-items: flex-start;
+        }
+
+        .section-heading {
+            gap: 9px;
+        }
+
+        .section-icon {
+            width: 35px;
+            height: 35px;
+            min-width: 35px;
+            border-radius: 10px;
+            font-size: 13px;
+        }
+
+        .section-title {
+            font-size: 0.9rem;
+        }
+
+        .section-subtitle {
+            font-size: 0.64rem;
+        }
+
+        .section-counter {
+            display: none;
+        }
+
+        .profile-content {
+            padding: 16px;
+        }
+
+        .profile-row {
+            align-items: flex-start;
+            flex-direction: column;
+            gap: 6px;
+            padding: 12px 3px;
+        }
+
+        .profile-value {
+            width: 100%;
+            text-align: left;
+        }
+
+        .attendance-badge {
+            text-align: left;
+        }
+
+        .activity-content {
+            padding: 5px 16px 15px;
+        }
+
+        .activity-item-emp {
+            gap: 9px;
+            padding: 13px 5px;
+        }
+
+        .activity-icon-emp {
+            width: 34px;
+            height: 34px;
+            min-width: 34px;
+            border-radius: 9px;
+            font-size: 0.76rem;
+        }
+
+        .activity-title {
+            font-size: 0.75rem;
+        }
+
+        .activity-description {
+            font-size: 0.68rem;
+        }
+
+        .activity-time {
+            display: none;
+        }
+
+        .table-emp {
+            min-width: 680px;
+        }
+
+        .table-emp th,
+        .table-emp td {
+            padding-left: 13px;
+            padding-right: 13px;
+        }
+    }
+
+    /* =========================================================
+       RESPONSIVE - SMALL MOBILE
+       ========================================================= */
+
+    @@media (max-width: 575.98px) {
+
+        .welcome-banner {
+            padding: 16px;
+        }
+
+        .welcome-content > .d-flex:first-child {
+            width: 100%;
+        }
+
+        .welcome-title {
+            font-size: 0.94rem;
+        }
+
+        .welcome-subtitle {
+            font-size: 0.65rem;
+        }
+
+        .section-header {
+            padding: 14px;
+        }
+
+        .profile-content {
+            padding: 14px;
+        }
+
+        .activity-content {
+            padding-left: 14px;
+            padding-right: 14px;
+        }
+
+        .profile-label {
+            font-size: 0.62rem;
+        }
+
+        .profile-value {
+            font-size: 0.74rem;
+        }
+
+        .employee-code {
+            font-size: 0.68rem;
+        }
+
+        .role-badge,
+        .badge-active {
+            font-size: 0.66rem;
+        }
+
+        .empty-message {
+            padding: 32px 12px;
+        }
+    }
+
+    /* =========================================================
+       REDUCED MOTION
+       ========================================================= */
+
+    @@media (prefers-reduced-motion: reduce) {
+
+        .employee-portal,
+        .welcome-banner,
+        .portal-section,
+        .employee-avatar {
+            animation: none !important;
+        }
+
+        .emp-card,
+        .section-icon,
+        .profile-row,
+        .activity-item-emp,
+        .activity-icon-emp,
+        .print-btn,
+        .attendance-action {
+            transition: none !important;
+        }
+
+        .portal-status-dot {
+            animation: none !important;
+        }
+    }
+</style>
+
+
+<div class="container-fluid employee-portal">
+
+    <div class="portal-content">
+
+        <!-- =====================================================
+             WELCOME HEADER
+             ===================================================== -->
+
+        <div class="welcome-banner">
+
+            <div class="d-flex align-items-center justify-content-between gap-3 flex-wrap welcome-content">
+
+                <div class="d-flex align-items-center gap-3">
+
+                    <div class="employee-avatar">
+                        @(currentUser != null && !string.IsNullOrEmpty(currentUser.FullName)
+                            ? currentUser.FullName.Substring(0, 1).ToUpper()
+                            : "E")
+                    </div>
+
+                    <div>
+
+                        <h4 class="welcome-title">
+                            Good day, @(currentUser != null ? currentUser.FullName : "Employee")!
+                        </h4>
+
+                        <p class="welcome-subtitle">
+                            <i class="fa-solid fa-calendar-day me-1"></i>
+                            Welcome back to your central operations panel.
+                        </p>
+
+                    </div>
+
+                </div>
+
+
+                <div class="d-flex align-items-center gap-3 flex-wrap attendance-action">
+
+                    @if (Model.TodayAttendance == null)
+                    {
+                        <form action="/ESSAttendance/CheckIn"
+                              method="post"
+                              class="d-inline">
+
+                            @Html.AntiForgeryToken()
+
+                            <button type="submit"
+                                    class="btn btn-success btn-sm rounded-pill px-3 shadow-sm">
+
+                                <i class="fa-solid fa-right-to-bracket me-1"></i>
+                                Quick Clock In
+
+                            </button>
+
+                        </form>
+                    }
+                    else if (Model.TodayAttendance.CheckOutTime == null)
+                    {
+                        <form action="/ESSAttendance/CheckOut"
+                              method="post"
+                              class="d-inline">
+
+                            @Html.AntiForgeryToken()
+
+                            <button type="submit"
+                                    class="btn btn-danger btn-sm rounded-pill px-3 shadow-sm">
+
+                                <i class="fa-solid fa-right-from-bracket me-1"></i>
+                                Clock Out
+                                (@(Model.TodayAttendance.CheckInTime?.ToString("hh:mm tt")))
+
+                            </button>
+
+                        </form>
+                    }
+                    else
+                    {
+                        <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-3 py-2 rounded-pill font-monospace">
+
+                            <i class="fa-solid fa-circle-check text-success me-1"></i>
+
+                            Shift Completed
+                            (@Model.TodayAttendance.WorkHours)
+
+                        </span>
+                    }
+
+
+                    <div class="portal-status">
+
+                        <span class="portal-status-dot"></span>
+
+                        Employee Portal Active
+
+                    </div>
+
+                </div>
+
+            </div>
+
+        </div>
+
+
+        <!-- =====================================================
+             1. MY PROFILE SUMMARY
+             FULL WIDTH
+             ===================================================== -->
+
+        <section class="portal-section">
+
+            <div class="emp-card">
+
+                <div class="section-header">
+
+                    <div class="section-heading">
+
+                        <div class="section-icon">
+                            <i class="fa-solid fa-user"></i>
+                        </div>
+
+                        <div>
+
+                            <h5 class="section-title">
+                                My Profile Summary
+                            </h5>
+
+                            <p class="section-subtitle">
+                                Your employee account information
+                            </p>
+
+                        </div>
+
+                    </div>
+
+
+                    <div class="section-counter">
+
+                        <i class="fa-solid fa-id-card"></i>
+
+                        Employee Profile
+
+                    </div>
+
+                </div>
+
+
+                <div class="profile-content">
+
+                    @if (currentUser != null)
+                    {
+                        <div class="profile-details">
+
+                            <!-- Employee Code -->
+                            <div class="profile-row">
+
+                                <span class="profile-label">
+                                    Employee Code
+                                </span>
+
+                                <code class="employee-code">
+                                    @currentUser.UserCode
+                                </code>
+
+                            </div>
+
+
+                            <!-- Username -->
+                            <div class="profile-row">
+
+                                <span class="profile-label">
+                                    System Username
+                                </span>
+
+                                <strong class="profile-value">
+                                    @@ @currentUser.UserName
+                                </strong>
+
+                            </div>
+
+
+                            <!-- Email -->
+                            <div class="profile-row">
+
+                                <span class="profile-label">
+                                    Work Email
+                                </span>
+
+                                <span class="profile-value">
+                                    @currentUser.Email
+                                </span>
+
+                            </div>
+
+
+                            <!-- Phone -->
+                            <div class="profile-row">
+
+                                <span class="profile-label">
+                                    Phone Connection
+                                </span>
+
+                                <span class="profile-value">
+
+                                    @(string.IsNullOrEmpty(currentUser.MobileNumber)
+                                        ? "N/A"
+                                        : currentUser.MobileNumber)
+
+                                </span>
+
+                            </div>
+
+
+                            <!-- Role -->
+                            <div class="profile-row">
+
+                                <span class="profile-label">
+                                    Assigned Role
+                                </span>
+
+                                <span class="role-badge">
+
+                                    <i class="fa-solid fa-user-tag"></i>
+
+                                    @(currentUser.Role?.RoleName ?? "Employee")
+
+                                </span>
+
+                            </div>
+
+
+                            <!-- Attendance -->
+                            <div class="profile-row">
+
+                                <span class="profile-label">
+                                    Today's Attendance
+                                </span>
+
+                                @if (Model.TodayAttendance == null)
+                                {
+                                    <span class="badge bg-secondary-subtle text-secondary rounded-pill px-3 py-2 attendance-badge">
+
+                                        <i class="fa-solid fa-clock"></i>
+
+                                        Not Clocked In
+
+                                    </span>
+                                }
+                                else if (Model.TodayAttendance.CheckOutTime == null)
+                                {
+                                    <span class="badge bg-success-subtle text-success rounded-pill px-3 py-2 attendance-badge">
+
+                                        <i class="fa-solid fa-circle-check"></i>
+
+                                        Clocked In
+                                        (@(Model.TodayAttendance.CheckInTime?.ToString("hh:mm tt")))
+                                        -
+                                        @Model.TodayAttendance.Status
+
+                                    </span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-primary-subtle text-primary rounded-pill px-3 py-2 attendance-badge">
+
+                                        <i class="fa-solid fa-business-time"></i>
+
+                                        @Model.TodayAttendance.WorkHours
+                                        (@Model.TodayAttendance.Status)
+
+                                    </span>
+                                }
+
+                            </div>
+
+
+                            <!-- Access Status -->
+                            <div class="profile-row">
+
+                                <span class="profile-label">
+                                    Access Status
+                                </span>
+
+                                <span class="badge-active">
+                                    Active Member
+                                </span>
+
+                            </div>
+
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="empty-message">
+
+                            <div class="empty-message-icon">
+                                <i class="fa-solid fa-user-slash"></i>
+                            </div>
+
+                            <div class="empty-message-title">
+                                Employee profile unavailable
+                            </div>
+
+                            Unable to load employee profile records.
+
+                        </div>
+                    }
+
+                </div>
+
+            </div>
+
+        </section>
+
+
+        <!-- =====================================================
+             2. OPERATIONS BULLETIN
+             FULL WIDTH
+             ===================================================== -->
+
+        <section class="portal-section">
+
+            <div class="emp-card">
+
+                <div class="section-header">
+
+                    <div class="section-heading">
+
+                        <div class="section-icon">
+                            <i class="fa-solid fa-bell"></i>
+                        </div>
+
+                        <div>
+
+                            <h5 class="section-title">
+                                Operations Bulletin
+                            </h5>
+
+                            <p class="section-subtitle">
+                                Recent system activities and updates
+                            </p>
+
+                        </div>
+
+                    </div>
+
+
+                    <div class="section-counter">
+
+                        <i class="fa-solid fa-bolt"></i>
+
+                        Live Updates
+
+                    </div>
+
+                </div>
+
+
+                <div class="activity-content">
+
+                    <div class="activity-list-emp">
+
+                        @if (activityLogs != null && activityLogs.Any())
+                        {
+                            foreach (var activity in activityLogs)
+                            {
+                                var timeDiff =
+                                    DateTime.UtcNow -
+                                    activity.CreatedAt.ToUniversalTime();
+
+                                var timeStr =
+                                    timeDiff.TotalMinutes < 60
+                                    ? $"{(int)timeDiff.TotalMinutes}m ago"
+                                    : timeDiff.TotalHours < 24
+                                    ? $"{(int)timeDiff.TotalHours}h ago"
+                                    : $"{(int)timeDiff.TotalDays}d ago";
+
+
+                                <div class="activity-item-emp">
+
+                                    <div class="activity-icon-emp @activity.ColorClass">
+
+                                        <i class="fa-solid @activity.IconClass"></i>
+
+                                    </div>
+
+
+                                    <div class="flex-grow-1">
+
+                                        <div class="activity-title">
+                                            @activity.Title
+                                        </div>
+
+                                        <div class="activity-description">
+                                            @activity.Description
+                                        </div>
+
+                                    </div>
+
+
+                                    <div class="activity-time">
+                                        @timeStr
+                                    </div>
+
+                                </div>
+                            }
+                        }
+                        else
+                        {
+                            <div class="empty-message">
+
+                                <div class="empty-message-icon">
+                                    <i class="fa-solid fa-bell-slash"></i>
+                                </div>
+
+                                <div class="empty-message-title">
+                                    No active bulletins
+                                </div>
+
+                                No recent update bulletins active.
+
+                            </div>
+                        }
+
+                    </div>
+
+                </div>
+
+            </div>
+
+        </section>
+
+
+        <!-- =====================================================
+             3. OPERATIONAL LEDGER REFERENCE
+             FULL WIDTH
+             ===================================================== -->
+
+        <section class="portal-section">
+
+            <div class="emp-card">
+
+                <div class="section-header">
+
+                    <div class="section-heading">
+
+                        <div class="section-icon">
+                            <i class="fa-solid fa-receipt"></i>
+                        </div>
+
+                        <div>
+
+                            <h5 class="section-title">
+                                Operational Ledger Reference
+                            </h5>
+
+                            <p class="section-subtitle">
+                                Recent transaction records
+                            </p>
+
+                        </div>
+
+                    </div>
+
+
+                    <div class="section-counter">
+
+                        <i class="fa-solid fa-file-invoice"></i>
+
+                        Transaction Register
+
+                    </div>
+
+                </div>
+
+
+                <div class="table-content">
+
+                    <div class="table-responsive">
+
+                        <table class="table table-hover table-emp mb-0 border-0">
+
+                            <thead>
+
+                                <tr>
+
+                                    <th class="border-0">
+                                        Type
+                                    </th>
+
+                                    <th class="border-0">
+                                        Order No.
+                                    </th>
+
+                                    <th class="border-0">
+                                        Date
+                                    </th>
+
+                                    <th class="border-0">
+                                        Amount
+                                    </th>
+
+                                    <th class="border-0">
+                                        Status
+                                    </th>
+
+                                </tr>
+
+                            </thead>
+
+
+                            <tbody>
+
+                                @if (transactions != null && transactions.Any())
+                                {
+                                    foreach (var tx in transactions)
+                                    {
+                                        var statusClass =
+                                            tx.Status == "Paid"
+                                            ? "status-paid"
+                                            : "status-pending";
+
+
+                                        <tr>
+
+                                            <td>
+
+                                                <span class="transaction-type">
+                                                    @tx.Type
+                                                </span>
+
+                                            </td>
+
+
+                                            <td>
+
+                                                <span class="transaction-number">
+                                                    @tx.TransactionNo
+                                                </span>
+
+                                            </td>
+
+
+                                            <td>
+
+                                                @tx.Date.ToString("dd MMM yyyy")
+
+                                            </td>
+
+
+                                            <td>
+
+                                                <span class="amount-value">
+                                                    @tx.Amount.ToString("C0", inCulture)
+                                                </span>
+
+                                            </td>
+
+
+                                            <td>
+
+                                                <span class="status-pill @statusClass">
+                                                    @tx.Status
+                                                </span>
+
+                                            </td>
+
+                                        </tr>
+                                    }
+                                }
+                                else
+                                {
+                                    <tr>
+
+                                        <td colspan="5">
+
+                                            <div class="empty-message">
+
+                                                <div class="empty-message-icon">
+                                                    <i class="fa-solid fa-receipt"></i>
+                                                </div>
+
+                                                <div class="empty-message-title">
+                                                    No ledger records found
+                                                </div>
+
+                                                No ledger records found in database.
+
+                                            </div>
+
+                                        </td>
+
+                                    </tr>
+                                }
+
+                            </tbody>
+
+                        </table>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+        </section>
+
+
+        <!-- =====================================================
+             4. MY SALARY SLIPS
+             FULL WIDTH
+             ===================================================== -->
+
+        <section class="portal-section">
+
+            <div class="emp-card">
+
+                <div class="section-header">
+
+                    <div class="section-heading">
+
+                        <div class="section-icon">
+                            <i class="fa-solid fa-file-invoice-dollar"></i>
+                        </div>
+
+                        <div>
+
+                            <h5 class="section-title">
+                                My Salary Slips
+                            </h5>
+
+                            <p class="section-subtitle">
+                                Your recently generated payslips
+                            </p>
+
+                        </div>
+
+                    </div>
+
+
+                    <div class="section-counter">
+
+                        <i class="fa-solid fa-money-check-dollar"></i>
+
+                        Payroll Records
+
+                    </div>
+
+                </div>
+
+
+                <div class="table-content">
+
+                    <div class="table-responsive">
+
+                        <table class="table table-hover table-emp mb-0 border-0">
+
+                            <thead>
+
+                                <tr>
+
+                                    <th class="border-0">
+                                        Period
+                                    </th>
+
+                                    <th class="border-0">
+                                        Net Salary
+                                    </th>
+
+                                    <th class="border-0 text-center">
+                                        Action
+                                    </th>
+
+                                </tr>
+
+                            </thead>
+
+
+                            <tbody>
+
+                                @{
+                                    var myPayslips = Model.RecentPayslips;
+                                }
+
+
+                                @if (myPayslips != null && myPayslips.Any())
+                                {
+                                    foreach (var slip in myPayslips)
+                                    {
+                                        <tr>
+
+                                            <td class="fw-bold text-dark">
+
+                                                @(slip.PayPeriod ?? "N/A")
+
+                                            </td>
+
+
+                                            <td>
+
+                                                <span class="salary-value">
+
+                                                    @(slip.NetSalary?.ToString("C0", inCulture) ?? "₹0")
+
+                                                </span>
+
+                                            </td>
+
+
+                                            <td class="text-center">
+
+                                                <a href="/Payroll/ViewPayslip/@slip.PayslipId"
+                                                   target="_blank"
+                                                   class="btn btn-sm print-btn px-3 py-1">
+
+                                                    <i class="fa-solid fa-print"></i>
+
+                                                    Print
+
+                                                </a>
+
+                                            </td>
+
+                                        </tr>
+                                    }
+                                }
+                                else
+                                {
+                                    <tr>
+
+                                        <td colspan="3">
+
+                                            <div class="empty-message">
+
+                                                <div class="empty-message-icon">
+                                                    <i class="fa-solid fa-file-circle-xmark"></i>
+                                                </div>
+
+                                                <div class="empty-message-title">
+                                                    No payslips available
+                                                </div>
+
+                                                No payslips generated for your profile.
+
+                                            </div>
+
+                                        </td>
+
+                                    </tr>
+                                }
+
+                            </tbody>
+
+                        </table>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+        </section>
+            
+    </div>
+
+</div>

@@ -1,0 +1,300 @@
+@model IEnumerable<ERP_System.Models.CandidateApplication>
+@{
+    Layout = "_DashboardLayout";
+    ViewData["Title"] = "Candidate Pipeline";
+}
+
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-2">
+    <div>
+        <h4 class="fw-bold mb-1 text-dark">
+            <i class="fa fa-users text-primary me-2"></i>Candidate Pipeline
+        </h4>
+        <p class="text-muted small mb-0">Manage candidates, recruitment stages, and hiring progress in real time.</p>
+    </div>
+    <button type="button" class="btn btn-primary rounded-pill px-4 shadow-sm" data-bs-toggle="modal" data-bs-target="#addCandidateModal">
+        <i class="fa fa-user-plus me-1"></i> + Add Candidate
+    </button>
+</div>
+
+@if (TempData["SuccessMessage"] != null)
+{
+    <div class="alert alert-success alert-dismissible fade show rounded-3 shadow-sm mb-3" role="alert">
+        <i class="fa fa-check-circle me-2"></i> @TempData["SuccessMessage"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+
+@if (TempData["ErrorMessage"] != null)
+{
+    <div class="alert alert-danger alert-dismissible fade show rounded-3 shadow-sm mb-3" role="alert">
+        <i class="fa fa-exclamation-triangle me-2"></i> @TempData["ErrorMessage"]
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+
+<!-- Automatic Filter Strip (Manual Filter Button Removed) -->
+<div class="card border-0 shadow-sm rounded-3 p-3 mb-4 bg-light">
+    <div class="row g-2 align-items-end">
+        <div class="col-md-4">
+            <label class="form-label small fw-bold text-muted">Search Candidate</label>
+            <div class="input-group input-group-sm">
+                <span class="input-group-text bg-white"><i class="fa fa-search text-muted"></i></span>
+                <input type="text" id="liveSearchInput" class="form-control" placeholder="Name, email or phone..." oninput="autoFilterCandidates()" value="@ViewBag.Search" />
+            </div>
+        </div>
+        <div class="col-md-3">
+            <label class="form-label small fw-bold text-muted">Job Opening</label>
+            <select id="jobOpeningFilter" class="form-select form-select-sm" onchange="autoFilterCandidates()">
+                <option value="">All Job Openings</option>
+                @if (ViewBag.JobOpenings != null)
+                {
+                    foreach (var job in (IEnumerable<ERP_System.Models.JobOpening>)ViewBag.JobOpenings)
+                    {
+                        <option value="@job.Id" selected="@(ViewBag.SelectedJobId != null && (int)ViewBag.SelectedJobId == job.Id)">
+                            @job.Title (@job.JobCode)
+                        </option>
+                    }
+                }
+            </select>
+        </div>
+        <div class="col-md-3">
+            <label class="form-label small fw-bold text-muted">Pipeline Stage</label>
+            <select id="stageFilter" class="form-select form-select-sm" onchange="autoFilterCandidates()">
+                <option value="All" selected="@(ViewBag.SelectedStage == null || ViewBag.SelectedStage == "All")">All Pipeline Stages</option>
+                <option value="Applied" selected="@(ViewBag.SelectedStage == "Applied")">Applied</option>
+                <option value="Screening" selected="@(ViewBag.SelectedStage == "Screening")">Screening</option>
+                <option value="Shortlisted" selected="@(ViewBag.SelectedStage == "Shortlisted")">Shortlisted</option>
+                <option value="Interview Scheduled" selected="@(ViewBag.SelectedStage == "Interview Scheduled")">Interview Scheduled</option>
+                <option value="HR Interview" selected="@(ViewBag.SelectedStage == "HR Interview")">HR Interview</option>
+                <option value="Technical Interview" selected="@(ViewBag.SelectedStage == "Technical Interview")">Technical Interview</option>
+                <option value="Final Interview" selected="@(ViewBag.SelectedStage == "Final Interview")">Final Interview</option>
+                <option value="Selected" selected="@(ViewBag.SelectedStage == "Selected")">Selected</option>
+                <option value="Offered" selected="@(ViewBag.SelectedStage == "Offered")">Offered</option>
+                <option value="Offer Accepted" selected="@(ViewBag.SelectedStage == "Offer Accepted")">Offer Accepted</option>
+                <option value="Hired" selected="@(ViewBag.SelectedStage == "Hired")">Hired</option>
+                <option value="Rejected" selected="@(ViewBag.SelectedStage == "Rejected")">Rejected</option>
+                <option value="On Hold" selected="@(ViewBag.SelectedStage == "On Hold")">On Hold</option>
+            </select>
+        </div>
+        <div class="col-md-2 d-flex">
+            <button type="button" class="btn btn-outline-secondary btn-sm w-100 rounded-pill" onclick="resetFilters()">
+                <i class="fa fa-redo me-1"></i> Reset
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Table Card -->
+<div class="card border-0 shadow-sm rounded-3">
+    <div class="card-body p-4">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Candidate</th>
+                        <th>Applied Position</th>
+                        <th>Experience & Skills</th>
+                        <th>Stage</th>
+                        <th>Resume</th>
+                        <th class="text-end">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="candidateTableBody">
+                    @await Html.PartialAsync("_CandidateTableRowsPartial", Model)
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- ADD CANDIDATE MODAL: Fixed Scrollable Height -->
+<div class="modal fade" id="addCandidateModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-lg">
+        <div class="modal-content border-0 shadow">
+            <form asp-action="AddCandidate" asp-controller="HRRecruitment" method="post" enctype="multipart/form-data">
+                @Html.AntiForgeryToken()
+                <div class="modal-header border-bottom bg-light px-4 py-3">
+                    <h5 class="modal-title fw-bold text-dark"><i class="fa fa-user-plus text-primary me-2"></i>Add New Candidate</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body px-4 py-3" style="max-height: 70vh;">
+                    <h6 class="fw-bold text-muted text-uppercase small mb-3">Recruitment Details</h6>
+                    <div class="row g-2 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Job Opening *</label>
+                            <select name="jobOpeningId" class="form-select form-select-sm" required>
+                                <option value="">-- Select Job Opening --</option>
+                                @if (ViewBag.JobOpenings != null)
+                                {
+                                    foreach (var job in (IEnumerable<ERP_System.Models.JobOpening>)ViewBag.JobOpenings)
+                                    {
+                                        <option value="@job.Id">@job.Title (@job.JobCode)</option>
+                                    }
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Initial Stage</label>
+                            <input type="text" name="initialStage" class="form-control form-control-sm bg-light" value="Applied" readonly />
+                        </div>
+                    </div>
+
+                    <h6 class="fw-bold text-muted text-uppercase small mb-3 mt-4">Candidate Information</h6>
+                    <div class="row g-2 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Full Name *</label>
+                            <input type="text" name="candidateName" class="form-control form-control-sm" placeholder="e.g. Arun Kumar" required />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Email Address *</label>
+                            <input type="email" name="email" class="form-control form-control-sm" placeholder="arun@example.com" required />
+                        </div>
+                    </div>
+
+                    <div class="row g-2 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Phone Number *</label>
+                            <input type="tel" name="phone" class="form-control form-control-sm" placeholder="+91 98765 43210" required />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Total Experience</label>
+                            <input type="text" name="experience" class="form-control form-control-sm" placeholder="e.g. 3.5 Years" />
+                        </div>
+                    </div>
+
+                    <div class="row g-2 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Education Qualification</label>
+                            <input type="text" name="educationQualification" class="form-control form-control-sm" placeholder="e.g. B.Tech Computer Science" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Current Company</label>
+                            <input type="text" name="currentCompany" class="form-control form-control-sm" placeholder="e.g. Current Employer" />
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Attach Resume (PDF/DOCX)</label>
+                        <input type="file" name="resume" class="form-control form-control-sm" accept=".pdf,.doc,.docx" />
+                    </div>
+                </div>
+                <div class="modal-footer border-top bg-light px-4 py-2">
+                    <button type="button" class="btn btn-light btn-sm" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary btn-sm px-4">Add to Pipeline</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- In-App Resume Viewer Modal -->
+<div class="modal fade" id="resumePreviewModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered" style="max-width: 90%; height: 90vh;">
+        <div class="modal-content border-0 shadow h-100">
+            <div class="modal-header border-bottom bg-light px-4 py-3">
+                <div>
+                    <h5 class="modal-title fw-bold text-dark" id="resumeModalCandidateName">Candidate Resume</h5>
+                    <small class="text-muted"><i class="fa fa-eye me-1"></i> In-App Document Viewer</small>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    <a href="#" id="resumeDirectDownloadBtn" class="btn btn-sm btn-outline-primary rounded-pill px-3" download>
+                        <i class="fa fa-download me-1"></i> Download
+                    </a>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+            </div>
+            <div class="modal-body p-0 h-100 position-relative" id="resumeModalBody" style="min-height: 75vh;">
+                <iframe id="resumeIframe" src="" style="width: 100%; height: 75vh; border: none;"></iframe>
+                <div id="docxNotice" class="d-none text-center p-5">
+                    <div class="my-4">
+                        <i class="fa fa-file-word text-primary fa-4x mb-3"></i>
+                        <h5 class="fw-bold">Microsoft Word Document (.doc/.docx)</h5>
+                        <p class="text-muted mx-auto" style="max-width: 480px;">
+                            Browsers cannot natively display Word binary documents inline. You can download or view the original file using Microsoft Office, Google Docs, or your local viewer.
+                        </p>
+                        <a href="#" id="docxDownloadBtn" class="btn btn-primary rounded-pill px-4 shadow-sm" download>
+                            <i class="fa fa-download me-1"></i> Download & View Locally
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let filterDebounce;
+    function autoFilterCandidates() {
+        clearTimeout(filterDebounce);
+        filterDebounce = setTimeout(() => {
+            const search = document.getElementById('liveSearchInput').value;
+            const jobOpeningId = document.getElementById('jobOpeningFilter').value;
+            const stage = document.getElementById('stageFilter').value;
+
+            const url = `/HRRecruitment/CandidatePipeline?search=${encodeURIComponent(search)}&jobOpeningId=${jobOpeningId}&stage=${encodeURIComponent(stage)}`;
+
+            fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+                .then(res => res.text())
+                .then(html => {
+                    document.getElementById('candidateTableBody').innerHTML = html;
+                })
+                .catch(err => console.error('Filter error:', err));
+        }, 300);
+    }
+
+    function resetFilters() {
+        document.getElementById('liveSearchInput').value = '';
+        document.getElementById('jobOpeningFilter').value = '';
+        document.getElementById('stageFilter').value = 'All';
+        autoFilterCandidates();
+    }
+
+    function setCandidateStage(candidateId, newStage) {
+        if (!confirm(`Mark candidate as ${newStage}?`)) return;
+
+        fetch('/HRRecruitment/UpdateCandidateStage', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({ candidateId: candidateId, stage: newStage })
+        })
+        .then(r => r.json())
+        .then(res => {
+            if (res.success) { 
+                autoFilterCandidates(); 
+            } else { 
+                alert(res.message); 
+            }
+        })
+        .catch(err => {
+            console.error('Stage update error:', err);
+            alert('Failed to update stage. Please try again.');
+        });
+    }
+
+    function previewResume(filePath, candidateName) {
+        if (!filePath || filePath.trim() === '') {
+            alert('No resume file attached for this candidate.');
+            return;
+        }
+
+        document.getElementById('resumeModalCandidateName').innerText = `${candidateName} - Resume`;
+        document.getElementById('resumeDirectDownloadBtn').href = filePath;
+
+        const isDocx = filePath.toLowerCase().endsWith('.doc') || filePath.toLowerCase().endsWith('.docx');
+        const iframe = document.getElementById('resumeIframe');
+        const docxNotice = document.getElementById('docxNotice');
+
+        if (isDocx) {
+            iframe.classList.add('d-none');
+            iframe.src = '';
+            docxNotice.classList.remove('d-none');
+            document.getElementById('docxDownloadBtn').href = filePath;
+        } else {
+            docxNotice.classList.add('d-none');
+            iframe.classList.remove('d-none');
+            iframe.src = filePath;
+        }
+
+        new bootstrap.Modal(document.getElementById('resumePreviewModal')).show();
+    }
+</script>

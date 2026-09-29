@@ -1,0 +1,434 @@
+﻿@model IEnumerable<ERP_System.Models.CompanyHoliday>
+@{
+    Layout = "_DashboardLayout";
+    ViewData["Title"] = "Holiday Calendar";
+
+    int selectedYear = ViewBag.SelectedYear ?? DateTime.Today.Year;
+    string selectedType = ViewBag.SelectedType as string ?? "All";
+
+    var totalHolidays = ViewBag.TotalHolidays ?? Model?.Count() ?? 0;
+    var mandatoryCount = ViewBag.MandatoryCount ?? Model?.Count(h => h.Type == "Mandatory") ?? 0;
+    var optionalCount = ViewBag.OptionalCount ?? Model?.Count(h => h.Type == "Optional") ?? 0;
+    var restrictedCount = ViewBag.RestrictedCount ?? Model?.Count(h => h.Type == "Restricted") ?? 0;
+}
+
+<style>
+    /* =========================================================
+       HOLIDAY CALENDAR - PREMIUM ERP UI
+       ========================================================= */
+    .holiday-page {
+        animation: holidayPageEnter 0.65s cubic-bezier(.22,.61,.36,1) both;
+    }
+
+    @@keyframes holidayPageEnter {
+        from {
+            opacity: 0;
+            transform: translateY(18px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    .holiday-title-icon {
+        width: 44px;
+        height: 44px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 14px;
+        background: rgba(13, 110, 253, 0.10);
+        color: #0d6efd;
+    }
+
+    .holiday-stat-card {
+        border-radius: 16px;
+        border: 1px solid #edf0f4;
+        transition: transform 0.28s ease, box-shadow 0.28s ease;
+    }
+
+    .holiday-stat-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 15px 32px rgba(20, 30, 55, 0.08) !important;
+    }
+
+    .date-badge {
+        font-size: 0.82rem;
+        padding: 5px 10px;
+        border-radius: 8px;
+        background: #f8f9fb;
+        border: 1px solid #e5e9f0;
+        display: inline-block;
+    }
+</style>
+
+<div class="container-fluid py-4 text-start holiday-page">
+
+    @if (TempData["SuccessMessage"] != null)
+    {
+        <div class="alert alert-success alert-dismissible fade show rounded-3 shadow-sm mb-4" role="alert">
+            <i class="fa-solid fa-circle-check me-2"></i>@TempData["SuccessMessage"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    }
+
+    @if (TempData["ErrorMessage"] != null)
+    {
+        <div class="alert alert-danger alert-dismissible fade show rounded-3 shadow-sm mb-4" role="alert">
+            <i class="fa-solid fa-triangle-exclamation me-2"></i>@TempData["ErrorMessage"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    }
+
+    <!-- Header -->
+    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
+        <div class="d-flex align-items-center gap-3">
+            <div class="holiday-title-icon">
+                <i class="fa-solid fa-umbrella-beach fa-lg"></i>
+            </div>
+            <div>
+                <h4 class="fw-bold mb-1 text-dark">Company Holiday Calendar</h4>
+                <nav aria-label="breadcrumb">
+                    <ol class="breadcrumb mb-0 small">
+                        <li class="breadcrumb-item"><a href="/HR" class="text-decoration-none">HR Dashboard</a></li>
+                        <li class="breadcrumb-item active" aria-current="page">Holiday Calendar</li>
+                    </ol>
+                </nav>
+            </div>
+        </div>
+
+        <button type="button"
+                class="btn btn-primary rounded-pill px-3.5 py-2 btn-sm shadow-sm"
+                data-bs-toggle="modal"
+                data-bs-target="#addHolidayModal">
+            <i class="fa-solid fa-plus me-1.5"></i>
+            Add Company Holiday
+        </button>
+    </div>
+
+    <!-- Summary Stat Cards -->
+    <div class="row g-3 mb-4">
+        <div class="col-12 col-sm-6 col-xl-3">
+            <div class="card bg-white p-3 shadow-sm holiday-stat-card border-start border-4 border-primary">
+                <div class="d-flex align-items-center justify-content-between">
+                    <div>
+                        <div class="text-muted fw-semibold small text-uppercase">Total Calendar Holidays</div>
+                        <h3 class="fw-bold text-dark mb-0 mt-1">@totalHolidays</h3>
+                    </div>
+                    <div class="rounded-circle bg-primary bg-opacity-10 text-primary p-3">
+                        <i class="fa-solid fa-calendar-days fa-lg"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12 col-sm-6 col-xl-3">
+            <div class="card bg-white p-3 shadow-sm holiday-stat-card border-start border-4 border-success">
+                <div class="d-flex align-items-center justify-content-between">
+                    <div>
+                        <div class="text-muted fw-semibold small text-uppercase">Mandatory Paid Holidays</div>
+                        <h3 class="fw-bold text-dark mb-0 mt-1">@mandatoryCount</h3>
+                    </div>
+                    <div class="rounded-circle bg-success bg-opacity-10 text-success p-3">
+                        <i class="fa-solid fa-building-circle-check fa-lg"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12 col-sm-6 col-xl-3">
+            <div class="card bg-white p-3 shadow-sm holiday-stat-card border-start border-4 border-warning">
+                <div class="d-flex align-items-center justify-content-between">
+                    <div>
+                        <div class="text-muted fw-semibold small text-uppercase">Optional Holidays</div>
+                        <h3 class="fw-bold text-dark mb-0 mt-1">@optionalCount</h3>
+                    </div>
+                    <div class="rounded-circle bg-warning bg-opacity-10 text-warning p-3">
+                        <i class="fa-solid fa-gift fa-lg"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12 col-sm-6 col-xl-3">
+            <div class="card bg-white p-3 shadow-sm holiday-stat-card border-start border-4 border-info">
+                <div class="d-flex align-items-center justify-content-between">
+                    <div>
+                        <div class="text-muted fw-semibold small text-uppercase">Restricted Holidays</div>
+                        <h3 class="fw-bold text-dark mb-0 mt-1">@restrictedCount</h3>
+                    </div>
+                    <div class="rounded-circle bg-info bg-opacity-10 text-info p-3">
+                        <i class="fa-solid fa-tags fa-lg"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filter Bar -->
+    <div class="card bg-white border-0 shadow-sm rounded-3 p-3 mb-4">
+        <form method="get" asp-action="HolidayList" id="holidayFilterForm" class="row g-3 align-items-end">
+            <div class="col-12 col-md-4">
+                <label class="form-label small fw-bold text-secondary mb-1">Calendar Year</label>
+                <select name="year" class="form-select form-select-sm" onchange="document.getElementById('holidayFilterForm').submit()">
+                    <option value="2025" selected="@(selectedYear == 2025)">Calendar Year 2025</option>
+                    <option value="2026" selected="@(selectedYear == 2026)">Calendar Year 2026 (Current)</option>
+                    <option value="2027" selected="@(selectedYear == 2027)">Calendar Year 2027</option>
+                </select>
+            </div>
+
+            <div class="col-12 col-md-4">
+                <label class="form-label small fw-bold text-secondary mb-1">Holiday Type</label>
+                <select name="type" class="form-select form-select-sm" onchange="document.getElementById('holidayFilterForm').submit()">
+                    <option value="All" selected="@(selectedType == "All")">All Holiday Types</option>
+                    <option value="Mandatory" selected="@(selectedType == "Mandatory")">Mandatory Holidays</option>
+                    <option value="Optional" selected="@(selectedType == "Optional")">Optional Holidays</option>
+                    <option value="Restricted" selected="@(selectedType == "Restricted")">Restricted Holidays</option>
+                </select>
+            </div>
+
+            <div class="col-12 col-md-4 d-flex gap-2">
+                <button type="submit" class="btn btn-primary btn-sm rounded-pill px-3 w-100">
+                    <i class="fa-solid fa-filter me-1"></i> Apply Filter
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Holidays Table -->
+    <div class="card bg-white border-0 shadow-sm rounded-3 p-4">
+        <div class="d-flex justify-content-between align-items-center mb-3 pb-2 border-bottom">
+            <h6 class="fw-bold mb-0 text-dark">
+                <i class="fa-solid fa-calendar-check text-primary me-2"></i>Official Holiday Schedule for @selectedYear
+            </h6>
+            <span class="badge bg-light text-dark border rounded-pill px-3 py-2">
+                @Model?.Count() Holidays Configured
+            </span>
+        </div>
+
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0" style="font-size: 0.85rem;">
+                <thead class="table-light">
+                    <tr>
+                        <th>Holiday Name</th>
+                        <th>Date</th>
+                        <th>Day of Week</th>
+                        <th>Type</th>
+                        <th>Description</th>
+                        <th class="text-center">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (Model != null && Model.Any())
+                    {
+                        foreach (var h in Model)
+                        {
+                            <tr>
+                                <td>
+                                    <div class="d-flex align-items-center gap-2">
+                                        <div class="rounded-circle @(h.Type == "Mandatory" ? "bg-success text-success" : h.Type == "Optional" ? "bg-warning text-warning" : "bg-info text-info") bg-opacity-10 d-flex align-items-center justify-content-center" style="width: 32px; height: 32px; min-width: 32px;">
+                                            <i class="fa-solid fa-calendar-star"></i>
+                                        </div>
+                                        <div class="fw-bold text-dark">@h.Name</div>
+                                    </div>
+                                </td>
+                                <td>
+                                    <span class="date-badge fw-semibold text-dark">
+                                        <i class="fa-regular fa-calendar-days text-primary me-1"></i>
+                                        @h.HolidayDate.ToString("dd MMMM yyyy")
+                                    </span>
+                                </td>
+                                <td>
+                                    <span class="badge bg-light text-secondary border rounded-pill px-2.5 py-1">
+                                        @h.DayOfWeek
+                                    </span>
+                                </td>
+                                <td>
+                                    @if (h.Type == "Mandatory")
+                                    {
+                                        <span class="badge bg-success-subtle text-success rounded-pill px-2.5 py-1">
+                                            <i class="fa-solid fa-lock me-1"></i>Mandatory
+                                        </span>
+                                    }
+                                    else if (h.Type == "Optional")
+                                    {
+                                        <span class="badge bg-warning-subtle text-warning-emphasis rounded-pill px-2.5 py-1">
+                                            <i class="fa-solid fa-hand me-1"></i>Optional
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-info-subtle text-info rounded-pill px-2.5 py-1">
+                                            <i class="fa-solid fa-tag me-1"></i>Restricted
+                                        </span>
+                                    }
+                                </td>
+                                <td class="text-muted small" style="max-width: 250px;">
+                                    @(string.IsNullOrEmpty(h.Description) ? "-" : h.Description)
+                                </td>
+                                <td class="text-center">
+                                    <div class="d-flex justify-content-center gap-1">
+                                        <button type="button"
+                                                class="btn btn-outline-primary btn-xs rounded-pill px-2.5 edit-holiday-btn"
+                                                data-bs-toggle="modal"
+                                                data-bs-target="#editHolidayModal"
+                                                data-id="@h.Id"
+                                                data-name="@h.Name"
+                                                data-date="@h.HolidayDate.ToString("yyyy-MM-dd")"
+                                                data-type="@h.Type"
+                                                data-desc="@h.Description"
+                                                data-year="@h.Year">
+                                            <i class="fa-solid fa-pen me-1"></i>Edit
+                                        </button>
+
+                                        <form asp-action="DeleteHoliday" method="post" class="d-inline">
+                                            @Html.AntiForgeryToken()
+                                            <input type="hidden" name="Id" value="@h.Id" />
+                                            <button type="submit" class="btn btn-outline-danger btn-xs rounded-pill px-2.5" onclick="return confirm('Delete holiday @h.Name?')">
+                                                <i class="fa-solid fa-trash me-1"></i>
+                                            </button>
+                                        </form>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    }
+                    else
+                    {
+                        <tr>
+                            <td colspan="6" class="text-center text-muted py-5">
+                                <i class="fa-solid fa-calendar-xmark fa-2x mb-2 text-secondary opacity-50"></i>
+                                <div>No holidays scheduled for this calendar year.</div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Add Holiday Modal -->
+<div class="modal fade" id="addHolidayModal" tabindex="-1" aria-labelledby="addHolidayModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content rounded-3 border-0 shadow">
+            <div class="modal-header border-bottom px-4 py-3">
+                <h5 class="modal-title fw-bold" id="addHolidayModalLabel">
+                    <i class="fa-solid fa-calendar-plus text-primary me-2"></i>
+                    Add Company Holiday
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+
+            <form asp-action="CreateHoliday" method="post">
+                @Html.AntiForgeryToken()
+
+                <div class="modal-body p-4">
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold text-secondary">Holiday Name <span class="text-danger">*</span></label>
+                        <input type="text" name="HolidayName" class="form-control" placeholder="e.g. Independence Day, New Year's Day" required />
+                    </div>
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-6">
+                            <label class="form-label small fw-bold text-secondary">Holiday Date <span class="text-danger">*</span></label>
+                            <input type="date" name="Date" class="form-control" value="@DateTime.Today.ToString("yyyy-MM-dd")" required />
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small fw-bold text-secondary">Type <span class="text-danger">*</span></label>
+                            <select name="Type" class="form-select" required>
+                                <option value="Mandatory">Mandatory</option>
+                                <option value="Optional">Optional</option>
+                                <option value="Restricted">Restricted</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="mb-2">
+                        <label class="form-label small fw-bold text-secondary">Description / Remarks</label>
+                        <textarea name="Description" class="form-control" rows="2" placeholder="e.g. National holiday, company offices closed."></textarea>
+                    </div>
+                </div>
+
+                <div class="modal-footer border-top px-4 py-3">
+                    <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill px-3" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary btn-sm rounded-pill px-4">
+                        <i class="fa-solid fa-save me-1"></i> Save Holiday
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Holiday Modal -->
+<div class="modal fade" id="editHolidayModal" tabindex="-1" aria-labelledby="editHolidayModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content rounded-3 border-0 shadow">
+            <div class="modal-header border-bottom px-4 py-3">
+                <h5 class="modal-title fw-bold" id="editHolidayModalLabel">
+                    <i class="fa-solid fa-pen text-primary me-2"></i>
+                    Edit Company Holiday
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+
+            <form asp-action="EditHoliday" method="post">
+                @Html.AntiForgeryToken()
+                <input type="hidden" id="editHolidayId" name="Id" value="" />
+                <input type="hidden" id="editHolidayYear" name="Year" value="" />
+
+                <div class="modal-body p-4">
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold text-secondary">Holiday Name <span class="text-danger">*</span></label>
+                        <input type="text" id="editHolidayName" name="HolidayName" class="form-control" required />
+                    </div>
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-6">
+                            <label class="form-label small fw-bold text-secondary">Holiday Date <span class="text-danger">*</span></label>
+                            <input type="date" id="editHolidayDate" name="Date" class="form-control" required />
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small fw-bold text-secondary">Type <span class="text-danger">*</span></label>
+                            <select id="editHolidayType" name="Type" class="form-select" required>
+                                <option value="Mandatory">Mandatory</option>
+                                <option value="Optional">Optional</option>
+                                <option value="Restricted">Restricted</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="mb-2">
+                        <label class="form-label small fw-bold text-secondary">Description / Remarks</label>
+                        <textarea id="editHolidayDesc" name="Description" class="form-control" rows="2"></textarea>
+                    </div>
+                </div>
+
+                <div class="modal-footer border-top px-4 py-3">
+                    <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill px-3" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary btn-sm rounded-pill px-4">
+                        <i class="fa-solid fa-save me-1"></i> Update Holiday
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener("DOMContentLoaded", function () {
+        const editButtons = document.querySelectorAll(".edit-holiday-btn");
+        editButtons.forEach(btn => {
+            btn.addEventListener("click", function () {
+                document.getElementById("editHolidayId").value = this.getAttribute("data-id") || "";
+                document.getElementById("editHolidayName").value = this.getAttribute("data-name") || "";
+                document.getElementById("editHolidayDate").value = this.getAttribute("data-date") || "";
+                document.getElementById("editHolidayType").value = this.getAttribute("data-type") || "Mandatory";
+                document.getElementById("editHolidayDesc").value = this.getAttribute("data-desc") || "";
+                document.getElementById("editHolidayYear").value = this.getAttribute("data-year") || "@selectedYear";
+            });
+        });
+    });
+</script>

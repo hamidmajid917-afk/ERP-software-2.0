@@ -1,0 +1,1782 @@
+@model List<ERP_System.Models.StatutoryReturnFiling>
+@{
+    Layout = "_DashboardLayout";
+    ViewData["Title"] = "Statutory Compliance (PF / ESI / TDS)";
+
+    var filings = Model ?? (ViewBag.Filings as List<ERP_System.Models.StatutoryReturnFiling>) 
+        ?? new List<ERP_System.Models.StatutoryReturnFiling>();
+
+    var bankAccounts = ViewBag.BankAccounts as List<ERP_System.Models.CompanyBankAccount> 
+        ?? new List<ERP_System.Models.CompanyBankAccount>();
+
+    var pfRule = ViewBag.PfRule as ERP_System.Models.StatutoryRuleConfig 
+        ?? new ERP_System.Models.StatutoryRuleConfig { RuleKey = "PF", EmployerRate = 12.00m, EmployeeRate = 12.00m, WageCeiling = 15000.00m };
+
+    var esiRule = ViewBag.EsiRule as ERP_System.Models.StatutoryRuleConfig 
+        ?? new ERP_System.Models.StatutoryRuleConfig { RuleKey = "ESI", EmployerRate = 3.25m, EmployeeRate = 0.75m, WageCeiling = 21000.00m };
+
+    var tdsRule = ViewBag.TdsRule as ERP_System.Models.StatutoryRuleConfig 
+        ?? new ERP_System.Models.StatutoryRuleConfig { RuleKey = "TDS", StandardDeduction = 75000.00m, ActiveRegime = "New Tax Regime" };
+}
+
+<style>
+    /* =========================================================
+           STATUTORY COMPLIANCE PAGE
+        ========================================================= */
+
+    .statutory-page {
+        --primary-color: #2563eb;
+        --primary-dark: #1d4ed8;
+        --success-color: #059669;
+        --danger-color: #dc2626;
+        --warning-color: #d97706;
+        --page-bg: #f6f8fc;
+        --text-dark: #1e293b;
+        --text-muted: #64748b;
+        --border-color: #e2e8f0;
+    }
+
+    .statutory-page {
+        animation: statutoryFadeIn .55s ease-out;
+    }
+
+    @@keyframes statutoryFadeIn {
+        from {
+            opacity: 0;
+            transform: translateY(10px);
+        }
+
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    /* =========================================================
+           ALERT
+        ========================================================= */
+
+    .statutory-page .custom-alert {
+        border: none;
+        border-radius: 16px;
+        padding: 14px 18px;
+        box-shadow: 0 8px 24px rgba(15, 23, 42, .08);
+    }
+
+        .statutory-page .custom-alert i {
+            font-size: 18px;
+        }
+
+    /* =========================================================
+           HERO HEADER
+        ========================================================= */
+
+    .compliance-hero {
+        position: relative;
+        overflow: hidden;
+        padding: 30px 32px;
+        border-radius: 22px;
+        background: linear-gradient(135deg, #ffffff 0%, #f7faff 100%);
+        border: 1px solid rgba(37, 99, 235, .10);
+        box-shadow: 0 14px 40px rgba(15, 23, 42, .06);
+        margin-bottom: 24px;
+    }
+
+        .compliance-hero::before {
+            content: "";
+            position: absolute;
+            width: 220px;
+            height: 220px;
+            border-radius: 50%;
+            right: -80px;
+            top: -110px;
+            background: rgba(37, 99, 235, .06);
+        }
+
+        .compliance-hero::after {
+            content: "";
+            position: absolute;
+            width: 150px;
+            height: 150px;
+            border-radius: 50%;
+            right: 80px;
+            bottom: -100px;
+            background: rgba(5, 150, 105, .05);
+        }
+
+    .hero-content {
+        position: relative;
+        z-index: 2;
+    }
+
+    .hero-icon {
+        width: 56px;
+        height: 56px;
+        min-width: 56px;
+        border-radius: 17px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #fff;
+        font-size: 23px;
+        background: linear-gradient(135deg, var(--primary-color), #60a5fa);
+        box-shadow: 0 10px 22px rgba(37, 99, 235, .25);
+    }
+
+    .hero-title {
+        color: var(--text-dark);
+        font-size: 1.35rem;
+        font-weight: 750;
+        margin: 0;
+        letter-spacing: -.02em;
+    }
+
+    .hero-description {
+        color: var(--text-muted);
+        font-size: .88rem;
+        margin: 5px 0 0;
+    }
+
+    .compliance-breadcrumb {
+        margin-top: 14px;
+        margin-bottom: 0;
+    }
+
+        .compliance-breadcrumb .breadcrumb-item,
+        .compliance-breadcrumb .breadcrumb-item a {
+            color: var(--text-muted);
+            font-size: .8rem;
+        }
+
+            .compliance-breadcrumb .breadcrumb-item.active {
+                color: var(--primary-color);
+                font-weight: 600;
+            }
+
+    .btn-log-filing {
+        position: relative;
+        z-index: 3;
+        border: none;
+        color: #fff;
+        padding: 10px 17px;
+        font-size: .82rem;
+        font-weight: 650;
+        border-radius: 12px;
+        background: linear-gradient(135deg, #2563eb, #3b82f6);
+        box-shadow: 0 10px 20px rgba(37, 99, 235, .20);
+        transition: .25s ease;
+        white-space: nowrap;
+    }
+
+        .btn-log-filing:hover {
+            color: #fff;
+            transform: translateY(-2px);
+            box-shadow: 0 14px 28px rgba(37, 99, 235, .28);
+        }
+
+    /* =========================================================
+           SECTION HEADER
+        ========================================================= */
+
+    .section-heading {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin: 8px 0 16px;
+    }
+
+        .section-heading h6 {
+            color: var(--text-dark);
+            font-size: .95rem;
+            font-weight: 750;
+            margin: 0;
+        }
+
+        .section-heading p {
+            color: var(--text-muted);
+            font-size: .78rem;
+            margin: 3px 0 0;
+        }
+
+    /* =========================================================
+           COMPLIANCE CARDS
+        ========================================================= */
+
+    .compliance-card {
+        height: 100%;
+        position: relative;
+        overflow: hidden;
+        padding: 22px;
+        border-radius: 20px;
+        background: #fff;
+        border: 1px solid var(--border-color);
+        box-shadow: 0 8px 24px rgba(15, 23, 42, .045);
+        transition: .3s ease;
+    }
+
+        .compliance-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 18px 36px rgba(15, 23, 42, .10);
+        }
+
+        .compliance-card::before {
+            content: "";
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 4px;
+            height: 100%;
+            border-radius: 10px 0 0 10px;
+        }
+
+    .pf-card::before {
+        background: linear-gradient(#2563eb, #60a5fa);
+    }
+
+    .esi-card::before {
+        background: linear-gradient(#059669, #34d399);
+    }
+
+    .tds-card::before {
+        background: linear-gradient(#d97706, #fbbf24);
+    }
+
+    .card-top {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+    }
+
+    .compliance-type {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .type-icon {
+        width: 42px;
+        height: 42px;
+        border-radius: 13px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 17px;
+    }
+
+    .pf-icon {
+        color: #2563eb;
+        background: rgba(37, 99, 235, .10);
+    }
+
+    .esi-icon {
+        color: #059669;
+        background: rgba(5, 150, 105, .10);
+    }
+
+    .tds-icon {
+        color: #d97706;
+        background: rgba(217, 119, 6, .12);
+    }
+
+    .type-title {
+        font-size: .92rem;
+        font-weight: 750;
+        color: var(--text-dark);
+        line-height: 1.2;
+    }
+
+    .type-subtitle {
+        color: var(--text-muted);
+        font-size: .72rem;
+        margin-top: 3px;
+    }
+
+    .configure-btn {
+        border-radius: 9px;
+        padding: 7px 10px;
+        font-size: .73rem;
+        font-weight: 650;
+        transition: .25s ease;
+    }
+
+        .configure-btn:hover {
+            transform: translateY(-1px);
+        }
+
+    .rate-box {
+        padding: 15px;
+        border-radius: 15px;
+        margin-bottom: 14px;
+    }
+
+    .pf-rate-box {
+        background: linear-gradient(135deg, #eff6ff, #f8fbff);
+        border: 1px solid #dbeafe;
+    }
+
+    .esi-rate-box {
+        background: linear-gradient(135deg, #ecfdf5, #f7fffb);
+        border: 1px solid #d1fae5;
+    }
+
+    .tds-rate-box {
+        background: linear-gradient(135deg, #fffbeb, #fffdf6);
+        border: 1px solid #fef3c7;
+    }
+
+    .rate-label {
+        color: var(--text-muted);
+        font-size: .7rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: .04em;
+    }
+
+    .rate-value {
+        color: var(--text-dark);
+        font-size: 1.08rem;
+        font-weight: 750;
+        margin-top: 4px;
+    }
+
+    .rate-separator {
+        color: #cbd5e1;
+        margin: 0 7px;
+    }
+
+    .card-info {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 9px 0;
+        border-bottom: 1px dashed #e2e8f0;
+    }
+
+        .card-info:last-child {
+            border-bottom: 0;
+            padding-bottom: 0;
+        }
+
+    .info-icon {
+        width: 30px;
+        height: 30px;
+        border-radius: 9px;
+        background: #f8fafc;
+        border: 1px solid #edf2f7;
+        color: var(--text-muted);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: .72rem;
+    }
+
+    .info-content {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .info-label {
+        display: block;
+        color: var(--text-muted);
+        font-size: .7rem;
+    }
+
+    .info-value {
+        display: block;
+        color: var(--text-dark);
+        font-size: .78rem;
+        font-weight: 700;
+        margin-top: 2px;
+    }
+
+    /* =========================================================
+           FILING LOG
+        ========================================================= */
+
+    .filing-section {
+        border-radius: 20px;
+        background: #fff;
+        border: 1px solid var(--border-color);
+        box-shadow: 0 8px 26px rgba(15, 23, 42, .045);
+        overflow: hidden;
+    }
+
+    .filing-header {
+        padding: 20px 22px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-bottom: 1px solid #edf1f5;
+    }
+
+    .filing-title-wrap {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+
+    .filing-title-icon {
+        width: 42px;
+        height: 42px;
+        border-radius: 13px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #eff6ff;
+        color: var(--primary-color);
+    }
+
+    .filing-title {
+        color: var(--text-dark);
+        font-size: .95rem;
+        font-weight: 750;
+        margin: 0;
+    }
+
+    .filing-subtitle {
+        color: var(--text-muted);
+        font-size: .74rem;
+        margin-top: 3px;
+    }
+
+    .filing-count {
+        padding: 7px 11px;
+        border-radius: 20px;
+        color: var(--primary-color);
+        background: #eff6ff;
+        font-size: .75rem;
+        font-weight: 700;
+    }
+
+    .compliance-table {
+        margin: 0;
+        font-size: .83rem;
+    }
+
+        .compliance-table thead th {
+            border-bottom: 1px solid #e8edf3;
+            padding: 14px 18px;
+            background: #f8fafc;
+            color: #64748b;
+            font-size: .68rem;
+            font-weight: 750;
+            text-transform: uppercase;
+            letter-spacing: .045em;
+            white-space: nowrap;
+        }
+
+        .compliance-table tbody td {
+            padding: 16px 18px;
+            border-color: #edf1f5;
+            color: #475569;
+            vertical-align: middle;
+        }
+
+        .compliance-table tbody tr {
+            transition: .2s ease;
+        }
+
+            .compliance-table tbody tr:hover {
+                background: #fafcff;
+            }
+
+    .return-name {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        color: var(--text-dark);
+        font-weight: 700;
+    }
+
+    .return-icon {
+        width: 34px;
+        height: 34px;
+        border-radius: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--primary-color);
+        background: #eff6ff;
+        font-size: .75rem;
+    }
+
+    .frequency-badge {
+        border: 1px solid #e2e8f0;
+        background: #f8fafc;
+        color: #475569;
+        padding: 6px 10px;
+        border-radius: 20px;
+        font-size: .7rem;
+        font-weight: 650;
+    }
+
+    .status-completed {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 6px 10px;
+        border-radius: 20px;
+        background: #ecfdf5;
+        color: #059669;
+        font-size: .7rem;
+        font-weight: 700;
+    }
+
+    .receipt-code {
+        display: inline-block;
+        padding: 5px 9px;
+        border-radius: 7px;
+        color: #334155;
+        background: #f1f5f9;
+        border: 1px solid #e2e8f0;
+        font-size: .73rem;
+        font-weight: 600;
+    }
+
+    .bank-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 9px;
+        border-radius: 8px;
+        background: #f1f5f9;
+        color: #334155;
+        font-size: 0.74rem;
+        font-weight: 600;
+    }
+
+    .amount-text {
+        font-weight: 700;
+        color: #0f172a;
+    }
+
+    .empty-state {
+        padding: 60px 20px !important;
+        text-align: center;
+    }
+
+    .empty-icon {
+        width: 62px;
+        height: 62px;
+        margin: 0 auto 15px;
+        border-radius: 50%;
+        background: #f1f5f9;
+        color: #94a3b8;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 24px;
+    }
+
+    .empty-title {
+        color: var(--text-dark);
+        font-size: .95rem;
+        font-weight: 700;
+        margin-bottom: 5px;
+    }
+
+    .empty-text {
+        color: var(--text-muted);
+        font-size: .78rem;
+        margin: 0;
+    }
+
+    /* =========================================================
+           MODALS
+        ========================================================= */
+
+    .statutory-modal .modal-content {
+        border: none;
+        border-radius: 20px;
+        overflow: hidden;
+        box-shadow: 0 24px 60px rgba(15, 23, 42, .18);
+    }
+
+    .statutory-modal .modal-header {
+        padding: 20px 22px;
+        border-bottom: 1px solid #eef2f6;
+        background: linear-gradient(135deg, #f8fbff, #ffffff);
+    }
+
+    .modal-title-wrap {
+        display: flex;
+        align-items: center;
+        gap: 11px;
+    }
+
+    .modal-title-icon {
+        width: 38px;
+        height: 38px;
+        border-radius: 11px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--primary-color);
+        background: #eff6ff;
+    }
+
+    .modal-title-wrap h5 {
+        color: var(--text-dark);
+        font-size: .95rem;
+        font-weight: 750;
+        margin: 0;
+    }
+
+    .modal-subtitle {
+        color: var(--text-muted);
+        font-size: .7rem;
+        margin-top: 2px;
+    }
+
+    .statutory-modal .modal-body {
+        padding: 24px;
+    }
+
+    .statutory-modal .modal-footer {
+        padding: 16px 22px;
+        background: #fafcff;
+        border-top: 1px solid #eef2f6;
+    }
+
+    .statutory-modal .form-label {
+        color: #475569;
+        font-size: .74rem;
+        font-weight: 700;
+        margin-bottom: 7px;
+    }
+
+    .statutory-modal .form-control,
+    .statutory-modal .form-select {
+        min-height: 42px;
+        border-radius: 10px;
+        border-color: #dbe3ec;
+        font-size: .82rem;
+        box-shadow: none;
+    }
+
+        .statutory-modal .form-control:focus,
+        .statutory-modal .form-select:focus {
+            border-color: #93c5fd;
+            box-shadow: 0 0 0 .2rem rgba(37, 99, 235, .08);
+        }
+
+    .modal-field-icon {
+        color: var(--primary-color);
+        margin-right: 5px;
+    }
+
+    .btn-modal-cancel {
+        padding: 9px 16px;
+        border-radius: 10px;
+        font-size: .78rem;
+        font-weight: 650;
+    }
+
+    .btn-modal-save {
+        border: none;
+        color: #fff;
+        padding: 9px 18px;
+        border-radius: 10px;
+        font-size: .78rem;
+        font-weight: 650;
+        background: linear-gradient(135deg, #2563eb, #3b82f6);
+        box-shadow: 0 8px 18px rgba(37, 99, 235, .18);
+        transition: .25s ease;
+    }
+
+        .btn-modal-save:hover {
+            color: #fff;
+            transform: translateY(-1px);
+        }
+
+    /* =========================================================
+           RESPONSIVE
+        ========================================================= */
+
+    @@media (max-width: 768px) {
+
+        .compliance-hero {
+            padding: 22px;
+        }
+
+        .hero-title {
+            font-size: 1.1rem;
+        }
+
+        .btn-log-filing {
+            width: 100%;
+            margin-top: 16px;
+        }
+
+        .filing-header {
+            align-items: flex-start;
+            gap: 15px;
+        }
+
+        .compliance-table thead th,
+        .compliance-table tbody td {
+            padding-left: 12px;
+            padding-right: 12px;
+        }
+    }
+</style>
+
+<div class="container-fluid py-4 text-start statutory-page">
+
+    @if (TempData["SuccessMessage"] != null)
+    {
+        <div class="alert alert-success alert-dismissible fade show custom-alert mb-4" role="alert">
+            <i class="fa-solid fa-circle-check me-2"></i>
+            @TempData["SuccessMessage"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    }
+
+    <!-- =========================================================
+         HERO HEADER
+    ========================================================= -->
+    <div class="compliance-hero">
+        <div class="hero-content d-flex flex-wrap justify-content-between align-items-center gap-3">
+
+            <div>
+                <div class="d-flex align-items-center gap-3">
+                    <div class="hero-icon">
+                        <i class="fa-solid fa-building-shield"></i>
+                    </div>
+
+                    <div>
+                        <h4 class="hero-title">Statutory Compliance & Bank Ledger</h4>
+                        <p class="hero-description">
+                            Manage PF, ESI, TDS statutory rules, log return filings with direct Company Bank Account debits and General Ledger entries.
+                        </p>
+                    </div>
+                </div>
+
+                <nav aria-label="breadcrumb">
+                    <ol class="breadcrumb compliance-breadcrumb">
+                        <li class="breadcrumb-item">
+                            <a href="/HR" class="text-decoration-none">
+                                <i class="fa-solid fa-house me-1"></i>HR Dashboard
+                            </a>
+                        </li>
+                        <li class="breadcrumb-item active" aria-current="page">
+                            Statutory Compliance
+                        </li>
+                    </ol>
+                </nav>
+            </div>
+
+            <button class="btn btn-log-filing"
+                    data-bs-toggle="modal"
+                    data-bs-target="#logFilingModal">
+                <i class="fa-solid fa-file-circle-plus me-2"></i>
+                Log Statutory Return Filing
+            </button>
+        </div>
+    </div>
+
+
+    <!-- =========================================================
+         CONFIGURATION SECTION
+    ========================================================= -->
+    <div class="section-heading">
+        <div>
+            <h6>
+                <i class="fa-solid fa-sliders text-primary me-2"></i>
+                Statutory Rule Configuration
+            </h6>
+            <p>Review and update the active statutory contribution percentages and deduction thresholds.</p>
+        </div>
+    </div>
+
+
+    <div class="row g-4 mb-4">
+
+        <!-- PF CARD -->
+        <div class="col-xl-4 col-md-6">
+            <div class="compliance-card pf-card">
+
+                <div class="card-top">
+                    <div class="compliance-type">
+                        <div class="type-icon pf-icon">
+                            <i class="fa-solid fa-shield-halved"></i>
+                        </div>
+
+                        <div>
+                            <div class="type-title">Provident Fund</div>
+                            <div class="type-subtitle">PF / EPF Contribution</div>
+                        </div>
+                    </div>
+
+                    <button class="btn btn-outline-primary configure-btn"
+                            data-bs-toggle="modal"
+                            data-bs-target="#editPfModal">
+                        <i class="fa-solid fa-pen me-1"></i>Configure
+                    </button>
+                </div>
+
+                <div class="rate-box pf-rate-box">
+                    <div class="rate-label">Contribution Rate (Employer | Employee)</div>
+                    <div class="rate-value">
+                        @pfRule.EmployerRate%
+                        <span class="rate-separator">|</span>
+                        @pfRule.EmployeeRate%
+                    </div>
+                </div>
+
+                <div class="card-info">
+                    <div class="info-icon">
+                        <i class="fa-solid fa-building"></i>
+                    </div>
+
+                    <div class="info-content">
+                        <span class="info-label">Employer Contribution</span>
+                        <span class="info-value">@pfRule.EmployerRate%</span>
+                    </div>
+                </div>
+
+                <div class="card-info">
+                    <div class="info-icon">
+                        <i class="fa-solid fa-user"></i>
+                    </div>
+
+                    <div class="info-content">
+                        <span class="info-label">Employee Contribution</span>
+                        <span class="info-value">@pfRule.EmployeeRate%</span>
+                    </div>
+                </div>
+
+                <div class="card-info">
+                    <div class="info-icon">
+                        <i class="fa-solid fa-indian-rupee-sign"></i>
+                    </div>
+
+                    <div class="info-content">
+                        <span class="info-label">Basic Wage Ceiling Limit</span>
+                        <span class="info-value">
+                            ₹@pfRule.WageCeiling.ToString("N0") / month
+                        </span>
+                    </div>
+                </div>
+
+                <div class="card-info">
+                    <div class="info-icon">
+                        <i class="fa-solid fa-calculator"></i>
+                    </div>
+
+                    <div class="info-content">
+                        <span class="info-label">Maximum Monthly PF Cap</span>
+                        <span class="info-value">₹@((pfRule.WageCeiling * pfRule.EmployeeRate / 100m).ToString("N0")) / month</span>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+
+        <!-- ESI CARD -->
+        <div class="col-xl-4 col-md-6">
+            <div class="compliance-card esi-card">
+
+                <div class="card-top">
+                    <div class="compliance-type">
+                        <div class="type-icon esi-icon">
+                            <i class="fa-solid fa-heart-pulse"></i>
+                        </div>
+
+                        <div>
+                            <div class="type-title">ESI Contribution</div>
+                            <div class="type-subtitle">Employee State Insurance</div>
+                        </div>
+                    </div>
+
+                    <button class="btn btn-outline-success configure-btn"
+                            data-bs-toggle="modal"
+                            data-bs-target="#editEsiModal">
+                        <i class="fa-solid fa-pen me-1"></i>Configure
+                    </button>
+                </div>
+
+                <div class="rate-box esi-rate-box">
+                    <div class="rate-label">Contribution Rate (Employer | Employee)</div>
+                    <div class="rate-value">
+                        @esiRule.EmployerRate%
+                        <span class="rate-separator">|</span>
+                        @esiRule.EmployeeRate%
+                    </div>
+                </div>
+
+                <div class="card-info">
+                    <div class="info-icon">
+                        <i class="fa-solid fa-building"></i>
+                    </div>
+
+                    <div class="info-content">
+                        <span class="info-label">Employer Contribution</span>
+                        <span class="info-value">@esiRule.EmployerRate%</span>
+                    </div>
+                </div>
+
+                <div class="card-info">
+                    <div class="info-icon">
+                        <i class="fa-solid fa-user"></i>
+                    </div>
+
+                    <div class="info-content">
+                        <span class="info-label">Employee Contribution</span>
+                        <span class="info-value">@esiRule.EmployeeRate%</span>
+                    </div>
+                </div>
+
+                <div class="card-info">
+                    <div class="info-icon">
+                        <i class="fa-solid fa-wallet"></i>
+                    </div>
+
+                    <div class="info-content">
+                        <span class="info-label">Gross Salary Eligibility Limit</span>
+                        <span class="info-value">
+                            ≤ ₹@esiRule.WageCeiling.ToString("N0") / month
+                        </span>
+                    </div>
+                </div>
+
+                <div class="card-info">
+                    <div class="info-icon">
+                        <i class="fa-solid fa-circle-check"></i>
+                    </div>
+
+                    <div class="info-content">
+                        <span class="info-label">Coverage Status</span>
+                        <span class="info-value">Active for staff with gross ≤ ₹@esiRule.WageCeiling.ToString("N0")</span>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+
+        <!-- TDS CARD -->
+        <div class="col-xl-4 col-md-12">
+            <div class="compliance-card tds-card">
+
+                <div class="card-top">
+                    <div class="compliance-type">
+                        <div class="type-icon tds-icon">
+                            <i class="fa-solid fa-file-invoice-dollar"></i>
+                        </div>
+
+                        <div>
+                            <div class="type-title">TDS & Income Tax</div>
+                            <div class="type-subtitle">Tax Deducted at Source</div>
+                        </div>
+                    </div>
+
+                    <button class="btn btn-outline-warning configure-btn"
+                            data-bs-toggle="modal"
+                            data-bs-target="#editTdsModal">
+                        <i class="fa-solid fa-pen me-1"></i>Configure
+                    </button>
+                </div>
+
+                <div class="rate-box tds-rate-box">
+                    <div class="rate-label">Active Tax Regime</div>
+                    <div class="rate-value">
+                        @(string.IsNullOrEmpty(tdsRule.ActiveRegime) ? "New Tax Regime" : tdsRule.ActiveRegime)
+                    </div>
+                </div>
+
+                <div class="card-info">
+                    <div class="info-icon">
+                        <i class="fa-solid fa-landmark"></i>
+                    </div>
+
+                    <div class="info-content">
+                        <span class="info-label">Tax Deduction Method</span>
+                        <span class="info-value">Section 192 Salary TDS</span>
+                    </div>
+                </div>
+
+                <div class="card-info">
+                    <div class="info-icon">
+                        <i class="fa-solid fa-indian-rupee-sign"></i>
+                    </div>
+
+                    <div class="info-content">
+                        <span class="info-label">Standard Deduction</span>
+                        <span class="info-value">
+                            ₹@tdsRule.StandardDeduction.ToString("N0") / year
+                        </span>
+                    </div>
+                </div>
+
+                <div class="card-info">
+                    <div class="info-icon">
+                        <i class="fa-solid fa-scale-balanced"></i>
+                    </div>
+
+                    <div class="info-content">
+                        <span class="info-label">Default Regime</span>
+                        <span class="info-value">
+                            @(string.IsNullOrEmpty(tdsRule.ActiveRegime) ? "New Tax Regime" : tdsRule.ActiveRegime)
+                        </span>
+                    </div>
+                </div>
+
+                <div class="card-info">
+                    <div class="info-icon">
+                        <i class="fa-solid fa-calendar-days"></i>
+                    </div>
+
+                    <div class="info-content">
+                        <span class="info-label">Deduction Cycle</span>
+                        <span class="info-value">Monthly Payroll Processing</span>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+    </div>
+
+
+    <!-- =========================================================
+         FILING LOG SECTION
+    ========================================================= -->
+    <div class="filing-section">
+
+        <div class="filing-header">
+
+            <div class="filing-title-wrap">
+                <div class="filing-title-icon">
+                    <i class="fa-solid fa-receipt"></i>
+                </div>
+
+                <div>
+                    <h6 class="filing-title">Statutory Return Filings & Bank Debits</h6>
+                    <div class="filing-subtitle">
+                        Track filing receipts, challan payments, debited company bank accounts, and completed compliance returns.
+                    </div>
+                </div>
+            </div>
+
+            <div class="filing-count">
+                <i class="fa-solid fa-file-lines me-1"></i>
+                @filings.Count Record@(filings.Count == 1 ? "" : "s")
+            </div>
+
+        </div>
+
+
+        <div class="table-responsive">
+            <table class="table compliance-table align-middle">
+
+                <thead>
+                    <tr>
+                        <th>Compliance Return</th>
+                        <th>Frequency</th>
+                        <th>Filing Period</th>
+                        <th>Due Date</th>
+                        <th>Filing Date</th>
+                        <th>Receipt / Challan #</th>
+                        <th>Challan Amount</th>
+                        <th>Debited Bank Account</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+
+                <tbody>
+
+                    @if (!filings.Any())
+                    {
+                        <tr>
+                            <td colspan="9" class="empty-state">
+
+                                <div class="empty-icon">
+                                    <i class="fa-solid fa-folder-open"></i>
+                                </div>
+
+                                <div class="empty-title">
+                                    No filing records yet
+                                </div>
+
+                                <p class="empty-text">
+                                    Log your first PF, ESI, TDS or Professional Tax statutory filing receipt with automated bank account debiting.
+                                </p>
+
+                            </td>
+                        </tr>
+                    }
+                    else
+                    {
+                        @foreach (var f in filings)
+                        {
+                            <tr>
+
+                                <td>
+                                    <div class="return-name">
+                                        <div class="return-icon">
+                                            <i class="fa-solid fa-file-circle-check"></i>
+                                        </div>
+                                        <span>@f.ComplianceReturn</span>
+                                    </div>
+                                </td>
+
+                                <td>
+                                    <span class="frequency-badge">
+                                        <i class="fa-regular fa-clock me-1"></i>
+                                        @f.Frequency
+                                    </span>
+                                </td>
+
+                                <td class="fw-semibold">
+                                    @f.FilingPeriod
+                                </td>
+
+                                <td>
+                                    <span>
+                                        <i class="fa-regular fa-calendar me-1 text-muted"></i>
+                                        @f.DueDate.ToString("dd MMM yyyy")
+                                    </span>
+                                </td>
+
+                                <td>
+                                    <span>
+                                        <i class="fa-regular fa-calendar-check me-1 text-success"></i>
+                                        @f.FilingDate.ToString("dd MMM yyyy")
+                                    </span>
+                                </td>
+
+                                <td>
+                                    <code class="receipt-code">
+                                        @f.ReceiptOrChallanNumber
+                                    </code>
+                                </td>
+
+                                <td>
+                                    <span class="amount-text">
+                                        ₹@f.ChallanAmountPaid.ToString("N2")
+                                    </span>
+                                </td>
+
+                                <td>
+                                    @if (f.CompanyBankAccount != null)
+                                    {
+                                        <span class="bank-badge">
+                                            <i class="fa-solid fa-building-columns text-primary"></i>
+                                            @f.CompanyBankAccount.BankName (@(f.CompanyBankAccount.AccountNumber.Length > 4 ? ".." + f.CompanyBankAccount.AccountNumber.Substring(f.CompanyBankAccount.AccountNumber.Length - 4) : f.CompanyBankAccount.AccountNumber))
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted small">Direct / Non-Linked</span>
+                                    }
+                                </td>
+
+                                <td>
+                                    <span class="status-completed">
+                                        <i class="fa-solid fa-circle-check"></i>
+                                        @f.Status
+                                    </span>
+                                </td>
+
+                            </tr>
+                        }
+                    }
+
+                </tbody>
+            </table>
+        </div>
+
+    </div>
+
+</div>
+
+
+<!-- =========================================================
+     PF CONFIG MODAL
+========================================================= -->
+<div class="modal fade statutory-modal" id="editPfModal" tabindex="-1" aria-hidden="true">
+
+    <div class="modal-dialog modal-dialog-centered">
+
+        <div class="modal-content">
+
+            <div class="modal-header">
+
+                <div class="modal-title-wrap">
+                    <div class="modal-title-icon">
+                        <i class="fa-solid fa-shield-halved"></i>
+                    </div>
+
+                    <div>
+                        <h5>Update PF Settings</h5>
+                        <div class="modal-subtitle">
+                            Configure provident fund contribution rules
+                        </div>
+                    </div>
+                </div>
+
+                <button type="button"
+                        class="btn-close"
+                        data-bs-dismiss="modal"
+                        aria-label="Close"></button>
+
+            </div>
+
+
+            <form asp-action="UpdateRuleConfig" method="post">
+
+                @Html.AntiForgeryToken()
+
+                <input type="hidden" name="ruleKey" value="PF" />
+                <input type="hidden" name="standardDeduction" value="0" />
+                <input type="hidden" name="activeRegime" value="" />
+
+                <div class="modal-body">
+
+                    <div class="mb-3">
+                        <label class="form-label">
+                            <i class="fa-solid fa-user modal-field-icon"></i>
+                            Employee Contribution Rate (%)
+                        </label>
+
+                        <input type="number"
+                               step="0.01"
+                               name="employeeRate"
+                               class="form-control"
+                               value="@pfRule.EmployeeRate"
+                               required>
+                    </div>
+
+
+                    <div class="mb-3">
+                        <label class="form-label">
+                            <i class="fa-solid fa-building modal-field-icon"></i>
+                            Employer Contribution Rate (%)
+                        </label>
+
+                        <input type="number"
+                               step="0.01"
+                               name="employerRate"
+                               class="form-control"
+                               value="@pfRule.EmployerRate"
+                               required>
+                    </div>
+
+
+                    <div class="mb-0">
+                        <label class="form-label">
+                            <i class="fa-solid fa-indian-rupee-sign modal-field-icon"></i>
+                            Basic Wage Ceiling Limit (₹ / Month)
+                        </label>
+
+                        <input type="number"
+                               step="100"
+                               name="wageCeiling"
+                               class="form-control"
+                               value="@pfRule.WageCeiling"
+                               required>
+                    </div>
+
+                </div>
+
+
+                <div class="modal-footer">
+
+                    <button type="button"
+                            class="btn btn-light btn-modal-cancel"
+                            data-bs-dismiss="modal">
+                        Cancel
+                    </button>
+
+                    <button type="submit"
+                            class="btn btn-modal-save">
+                        <i class="fa-solid fa-floppy-disk me-1"></i>
+                        Update PF Rules
+                    </button>
+
+                </div>
+
+            </form>
+
+        </div>
+
+    </div>
+
+</div>
+
+
+<!-- =========================================================
+     ESI CONFIG MODAL
+========================================================= -->
+<div class="modal fade statutory-modal" id="editEsiModal" tabindex="-1" aria-hidden="true">
+
+    <div class="modal-dialog modal-dialog-centered">
+
+        <div class="modal-content">
+
+            <div class="modal-header">
+
+                <div class="modal-title-wrap">
+                    <div class="modal-title-icon">
+                        <i class="fa-solid fa-heart-pulse"></i>
+                    </div>
+
+                    <div>
+                        <h5>Update ESI Settings</h5>
+                        <div class="modal-subtitle">
+                            Configure employee state insurance rules
+                        </div>
+                    </div>
+                </div>
+
+                <button type="button"
+                        class="btn-close"
+                        data-bs-dismiss="modal"
+                        aria-label="Close"></button>
+
+            </div>
+
+
+            <form asp-action="UpdateRuleConfig" method="post">
+
+                @Html.AntiForgeryToken()
+
+                <input type="hidden" name="ruleKey" value="ESI" />
+                <input type="hidden" name="standardDeduction" value="0" />
+                <input type="hidden" name="activeRegime" value="" />
+
+                <div class="modal-body">
+
+                    <div class="mb-3">
+
+                        <label class="form-label">
+                            <i class="fa-solid fa-user modal-field-icon"></i>
+                            Employee ESI Rate (%)
+                        </label>
+
+                        <input type="number"
+                               step="0.01"
+                               name="employeeRate"
+                               class="form-control"
+                               value="@esiRule.EmployeeRate"
+                               required>
+
+                    </div>
+
+
+                    <div class="mb-3">
+
+                        <label class="form-label">
+                            <i class="fa-solid fa-building modal-field-icon"></i>
+                            Employer ESI Rate (%)
+                        </label>
+
+                        <input type="number"
+                               step="0.01"
+                               name="employerRate"
+                               class="form-control"
+                               value="@esiRule.EmployerRate"
+                               required>
+
+                    </div>
+
+
+                    <div class="mb-0">
+
+                        <label class="form-label">
+                            <i class="fa-solid fa-wallet modal-field-icon"></i>
+                            Gross Salary Eligibility Limit (₹ / Month)
+                        </label>
+
+                        <input type="number"
+                               step="100"
+                               name="wageCeiling"
+                               class="form-control"
+                               value="@esiRule.WageCeiling"
+                               required>
+
+                    </div>
+
+                </div>
+
+
+                <div class="modal-footer">
+
+                    <button type="button"
+                            class="btn btn-light btn-modal-cancel"
+                            data-bs-dismiss="modal">
+                        Cancel
+                    </button>
+
+                    <button type="submit"
+                            class="btn btn-modal-save">
+                        <i class="fa-solid fa-floppy-disk me-1"></i>
+                        Update ESI Rules
+                    </button>
+
+                </div>
+
+            </form>
+
+        </div>
+
+    </div>
+
+</div>
+
+
+<!-- =========================================================
+     TDS CONFIG MODAL
+========================================================= -->
+<div class="modal fade statutory-modal" id="editTdsModal" tabindex="-1" aria-hidden="true">
+
+    <div class="modal-dialog modal-dialog-centered">
+
+        <div class="modal-content">
+
+            <div class="modal-header">
+
+                <div class="modal-title-wrap">
+                    <div class="modal-title-icon">
+                        <i class="fa-solid fa-file-invoice-dollar"></i>
+                    </div>
+
+                    <div>
+                        <h5>Update TDS Settings</h5>
+                        <div class="modal-subtitle">
+                            Configure tax regime and deduction settings
+                        </div>
+                    </div>
+                </div>
+
+                <button type="button"
+                        class="btn-close"
+                        data-bs-dismiss="modal"
+                        aria-label="Close"></button>
+
+            </div>
+
+
+            <form asp-action="UpdateRuleConfig" method="post">
+
+                @Html.AntiForgeryToken()
+
+                <input type="hidden" name="ruleKey" value="TDS" />
+                <input type="hidden" name="employerRate" value="0" />
+                <input type="hidden" name="employeeRate" value="0" />
+                <input type="hidden" name="wageCeiling" value="0" />
+
+                <div class="modal-body">
+
+                    <div class="mb-3">
+
+                        <label class="form-label">
+                            <i class="fa-solid fa-scale-balanced modal-field-icon"></i>
+                            Default Tax Regime
+                        </label>
+
+                        <select name="activeRegime" class="form-select">
+
+                            @if (tdsRule.ActiveRegime == "Old Tax Regime")
+                            {
+                                <option value="New Tax Regime">
+                                    New Tax Regime (Section 115BAC)
+                                </option>
+
+                                <option value="Old Tax Regime" selected>
+                                    Old Tax Regime (With Deductions)
+                                </option>
+                            }
+                            else
+                            {
+                                <option value="New Tax Regime" selected>
+                                    New Tax Regime (Section 115BAC)
+                                </option>
+
+                                <option value="Old Tax Regime">
+                                    Old Tax Regime (With Deductions)
+                                </option>
+                            }
+
+                        </select>
+
+                    </div>
+
+
+                    <div class="mb-0">
+
+                        <label class="form-label">
+                            <i class="fa-solid fa-indian-rupee-sign modal-field-icon"></i>
+                            Standard Deduction (Annual ₹)
+                        </label>
+
+                        <input type="number"
+                               step="1000"
+                               name="standardDeduction"
+                               class="form-control"
+                               value="@tdsRule.StandardDeduction"
+                               required>
+
+                    </div>
+
+                </div>
+
+
+                <div class="modal-footer">
+
+                    <button type="button"
+                            class="btn btn-light btn-modal-cancel"
+                            data-bs-dismiss="modal">
+                        Cancel
+                    </button>
+
+                    <button type="submit"
+                            class="btn btn-modal-save">
+                        <i class="fa-solid fa-floppy-disk me-1"></i>
+                        Update TDS Settings
+                    </button>
+
+                </div>
+
+            </form>
+
+        </div>
+
+    </div>
+
+</div>
+
+
+<!-- =========================================================
+     LOG FILING RECEIPT MODAL (LINKED WITH COMPANY BANK ACCOUNT)
+========================================================= -->
+<div class="modal fade statutory-modal" id="logFilingModal" tabindex="-1" aria-hidden="true">
+
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+
+        <div class="modal-content">
+
+            <div class="modal-header">
+
+                <div class="modal-title-wrap">
+
+                    <div class="modal-title-icon">
+                        <i class="fa-solid fa-file-circle-plus"></i>
+                    </div>
+
+                    <div>
+                        <h5>Log Statutory Return Filing & Challan Payment</h5>
+                        <div class="modal-subtitle">
+                            Record compliance filing and automatically debit company bank account ledger
+                        </div>
+                    </div>
+
+                </div>
+
+                <button type="button"
+                        class="btn-close"
+                        data-bs-dismiss="modal"
+                        aria-label="Close"></button>
+
+            </div>
+
+
+            <form asp-action="LogFilingReceipt" method="post">
+
+                @Html.AntiForgeryToken()
+
+                <div class="modal-body">
+
+                    <div class="row g-3">
+
+                        <div class="col-md-6">
+
+                            <label class="form-label">
+                                <i class="fa-solid fa-building-columns modal-field-icon"></i>
+                                Compliance Return <span class="text-danger">*</span>
+                            </label>
+
+                            <select name="complianceReturn"
+                                    class="form-select"
+                                    required>
+
+                                <option value="Provident Fund ECR Monthly Return">
+                                    Provident Fund (PF) ECR Monthly Return
+                                </option>
+
+                                <option value="ESI Monthly Return (Challan)">
+                                    ESI Monthly Return & Challan
+                                </option>
+
+                                <option value="TDS Form 24Q (Salary TDS)">
+                                    TDS Form 24Q Quarterly Return
+                                </option>
+
+                                <option value="Professional Tax Monthly Return">
+                                    Professional Tax (PT) Return
+                                </option>
+
+                            </select>
+
+                        </div>
+
+
+                        <div class="col-md-6">
+
+                            <label class="form-label">
+                                <i class="fa-solid fa-repeat modal-field-icon"></i>
+                                Frequency
+                            </label>
+
+                            <select name="frequency" class="form-select">
+
+                                <option value="Monthly">Monthly</option>
+                                <option value="Quarterly">Quarterly</option>
+                                <option value="Annual">Annual</option>
+
+                            </select>
+
+                        </div>
+
+
+                        <div class="col-md-6">
+
+                            <label class="form-label">
+                                <i class="fa-solid fa-calendar-days modal-field-icon"></i>
+                                Filing Period <span class="text-danger">*</span>
+                            </label>
+
+                            <input type="text"
+                                   name="filingPeriod"
+                                   class="form-control"
+                                   required
+                                   placeholder="e.g. August 2026 or Q2 FY 2026-27">
+
+                        </div>
+
+
+                        <div class="col-md-6">
+
+                            <label class="form-label">
+                                <i class="fa-solid fa-calendar-check modal-field-icon"></i>
+                                Due Date <span class="text-danger">*</span>
+                            </label>
+
+                            <input type="date"
+                                   name="dueDate"
+                                   class="form-control"
+                                   required
+                                   value="@DateTime.Today.AddDays(15).ToString("yyyy-MM-dd")">
+
+                        </div>
+
+
+                        <div class="col-md-6">
+
+                            <label class="form-label">
+                                <i class="fa-solid fa-hashtag modal-field-icon"></i>
+                                Receipt / Challan / BSR Number <span class="text-danger">*</span>
+                            </label>
+
+                            <input type="text"
+                                   name="receiptOrChallanNumber"
+                                   class="form-control"
+                                   required
+                                   placeholder="e.g. PF-8839201 or CRN-99281">
+
+                        </div>
+
+
+                        <div class="col-md-6">
+
+                            <label class="form-label">
+                                <i class="fa-solid fa-indian-rupee-sign modal-field-icon"></i>
+                                Challan Amount Paid (₹) <span class="text-danger">*</span>
+                            </label>
+
+                            <input type="number"
+                                   step="0.01"
+                                   min="0"
+                                   name="challanAmountPaid"
+                                   class="form-control"
+                                   required
+                                   placeholder="0.00">
+
+                        </div>
+
+
+                        <div class="col-12">
+
+                            <label class="form-label">
+                                <i class="fa-solid fa-building-columns modal-field-icon"></i>
+                                Company Bank Account for Challan Debit
+                            </label>
+
+                            <select name="companyBankAccountId" class="form-select">
+                                <option value="">-- No Direct Bank Debit / Manual Cash / Outside ERP --</option>
+                                @foreach (var b in bankAccounts)
+                                {
+                                    <option value="@b.Id">
+                                        @b.BankName - @b.AccountNumber (Available Bal: ₹@b.CurrentBalance.ToString("N2")) @(b.IsPrimaryAccount ? "★ Primary" : "")
+                                    </option>
+                                }
+                            </select>
+                            <small class="text-muted">Selecting an account will automatically deduct the amount from company funds and log a general ledger bank transaction entry.</small>
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+
+                <div class="modal-footer">
+
+                    <button type="button"
+                            class="btn btn-light btn-modal-cancel"
+                            data-bs-dismiss="modal">
+                        Cancel
+                    </button>
+
+                    <button type="submit"
+                            class="btn btn-modal-save">
+                        <i class="fa-solid fa-floppy-disk me-1"></i>
+                        Record Filing & Debit Bank
+                    </button>
+
+                </div>
+
+            </form>
+
+        </div>
+
+    </div>
+
+</div>
+
+@section Scripts {
+    <script>
+        // Connect to SignalR Payroll Hub for real-time compliance updates
+        document.addEventListener("DOMContentLoaded", function () {
+            if (typeof signalR !== "undefined") {
+                const connection = new signalR.HubConnectionBuilder()
+                    .withUrl("/payrollHub")
+                    .withAutomaticReconnect()
+                    .build();
+
+                connection.on("ReceiveStatutoryRuleUpdated", function (data) {
+                    console.log("Statutory rule updated in real-time:", data);
+                });
+
+                connection.on("ReceiveStatutoryReturnFiled", function (data) {
+                    console.log("Statutory return filed:", data);
+                });
+
+                connection.start().catch(err => console.debug("SignalR connection skipped:", err));
+            }
+        });
+    </script>
+}

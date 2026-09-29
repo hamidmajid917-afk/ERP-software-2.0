@@ -1,0 +1,715 @@
+@model IEnumerable<ERP_System.Models.HRHoliday>
+@{
+    Layout = "_DashboardLayout";
+    ViewData["Title"] = "Company Holiday Calendar";
+
+    var totalHolidays = Model?.Count() ?? 0;
+    var upcomingHolidays = Model?
+        .Where(h => h.Date.Date >= DateTime.Today)
+        .OrderBy(h => h.Date)
+        .ToList() ?? new List<ERP_System.Models.HRHoliday>();
+
+    var nextHoliday = upcomingHolidays.FirstOrDefault();
+}
+
+<style>
+    /* =========================================================
+           COMPANY HOLIDAY CALENDAR - PREMIUM UI
+           ========================================================= */
+
+    .holiday-calendar-page {
+        animation: holidayPageEntrance 0.6s ease-out both;
+    }
+
+    @@keyframes holidayPageEntrance {
+        from {
+            opacity: 0;
+            transform: translateY(18px);
+        }
+
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    /* =========================================================
+           HEADER
+           ========================================================= */
+
+    .holiday-calendar-header {
+        animation: holidayHeaderEntrance 0.55s ease-out both;
+    }
+
+    @@keyframes holidayHeaderEntrance {
+        from {
+            opacity: 0;
+            transform: translateY(-12px);
+        }
+
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    .holiday-calendar-title {
+        color: var(--text-color, #1f2937);
+        letter-spacing: -0.5px;
+    }
+
+    .holiday-calendar-title-icon {
+        width: 44px;
+        height: 44px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 14px;
+        background: rgba(13, 110, 253, 0.10);
+        transition: all 0.3s ease;
+    }
+
+    .holiday-calendar-header:hover .holiday-calendar-title-icon {
+        transform: rotate(-7deg) scale(1.07);
+        background: rgba(13, 110, 253, 0.16);
+    }
+
+    .holiday-breadcrumb a {
+        transition: color 0.2s ease;
+    }
+
+        .holiday-breadcrumb a:hover {
+            color: var(--bs-primary) !important;
+        }
+
+    /* =========================================================
+           STAT CARDS
+           ========================================================= */
+
+    .holiday-stat-card {
+        position: relative;
+        overflow: hidden;
+        min-height: 115px;
+        background: #ffffff;
+        transition: transform 0.28s ease, box-shadow 0.28s ease;
+        animation: holidayStatEntrance 0.55s ease-out both;
+    }
+
+        .holiday-stat-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 16px 32px rgba(20, 30, 55, 0.10) !important;
+        }
+
+        .holiday-stat-card::after {
+            content: "";
+            position: absolute;
+            width: 120px;
+            height: 120px;
+            right: -42px;
+            top: -48px;
+            border-radius: 50%;
+            background: currentColor;
+            opacity: 0.035;
+            transition: transform 0.4s ease;
+        }
+
+        .holiday-stat-card:hover::after {
+            transform: scale(1.45);
+        }
+
+        .holiday-stat-card:nth-child(1) {
+            animation-delay: 0.08s;
+        }
+
+        .holiday-stat-card:nth-child(2) {
+            animation-delay: 0.16s;
+        }
+
+        .holiday-stat-card:nth-child(3) {
+            animation-delay: 0.24s;
+        }
+
+    @@keyframes holidayStatEntrance {
+        from {
+            opacity: 0;
+            transform: translateY(18px) scale(0.98);
+        }
+
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    .holiday-stat-icon {
+        width: 54px;
+        height: 54px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 17px;
+        flex-shrink: 0;
+        transition: transform 0.3s ease;
+    }
+
+    .holiday-stat-card:hover .holiday-stat-icon {
+        transform: rotate(-6deg) scale(1.08);
+    }
+
+    .holiday-stat-label {
+        font-size: 0.72rem;
+        letter-spacing: 0.65px;
+    }
+
+    .holiday-stat-value {
+        letter-spacing: -0.6px;
+    }
+
+    /* =========================================================
+           CALENDAR CARD
+           ========================================================= */
+
+    .holiday-calendar-card {
+        position: relative;
+        overflow: hidden;
+        border: 1px solid var(--border-warm, #e7e9ee) !important;
+        animation: holidayTableEntrance 0.65s ease-out 0.15s both;
+        transition: box-shadow 0.3s ease;
+    }
+
+        .holiday-calendar-card:hover {
+            box-shadow: 0 16px 36px rgba(20, 30, 55, 0.07) !important;
+        }
+
+    @@keyframes holidayTableEntrance {
+        from {
+            opacity: 0;
+            transform: translateY(18px);
+        }
+
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    .holiday-calendar-card-header {
+        padding-bottom: 16px;
+        border-bottom: 1px solid #edf0f4;
+    }
+
+    .holiday-calendar-subtitle {
+        font-size: 0.84rem;
+    }
+
+    .holiday-count-badge {
+        background: #f8f9fb !important;
+        transition: all 0.25s ease;
+    }
+
+    .holiday-calendar-card:hover .holiday-count-badge {
+        color: var(--bs-primary) !important;
+        border-color: rgba(13, 110, 253, 0.3) !important;
+    }
+
+    /* =========================================================
+           TABLE
+           ========================================================= */
+
+    .holiday-calendar-table thead th {
+        white-space: nowrap;
+        font-size: 0.72rem;
+        letter-spacing: 0.5px;
+        text-transform: uppercase;
+        padding: 13px 14px;
+        color: #6c757d;
+        border-bottom-width: 1px;
+    }
+
+    .holiday-calendar-table tbody tr {
+        animation: holidayRowEntrance 0.45s ease-out both;
+        transition: background-color 0.2s ease;
+    }
+
+        .holiday-calendar-table tbody tr:nth-child(1) {
+            animation-delay: 0.08s;
+        }
+
+        .holiday-calendar-table tbody tr:nth-child(2) {
+            animation-delay: 0.14s;
+        }
+
+        .holiday-calendar-table tbody tr:nth-child(3) {
+            animation-delay: 0.20s;
+        }
+
+        .holiday-calendar-table tbody tr:nth-child(4) {
+            animation-delay: 0.26s;
+        }
+
+        .holiday-calendar-table tbody tr:nth-child(5) {
+            animation-delay: 0.32s;
+        }
+
+        .holiday-calendar-table tbody tr:nth-child(n+6) {
+            animation-delay: 0.38s;
+        }
+
+        .holiday-calendar-table tbody tr:hover {
+            background: rgba(13, 110, 253, 0.025);
+        }
+
+        .holiday-calendar-table tbody tr td {
+            padding: 14px;
+            border-color: #f0f1f4;
+        }
+
+    @@keyframes holidayRowEntrance {
+        from {
+            opacity: 0;
+            transform: translateX(-8px);
+        }
+
+        to {
+            opacity: 1;
+            transform: translateX(0);
+        }
+    }
+
+    /* =========================================================
+           HOLIDAY DATE BOX
+           ========================================================= */
+
+    .holiday-date-box {
+        width: 52px;
+        min-width: 52px;
+        height: 58px;
+        border-radius: 14px;
+        background: rgba(13, 110, 253, 0.08);
+        border: 1px solid rgba(13, 110, 253, 0.10);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.25s ease;
+    }
+
+    .holiday-calendar-table tbody tr:hover .holiday-date-box {
+        transform: translateY(-2px) scale(1.04);
+        background: rgba(13, 110, 253, 0.13);
+    }
+
+    .holiday-date-day {
+        font-size: 1rem;
+        font-weight: 800;
+        line-height: 1;
+        color: var(--bs-primary);
+    }
+
+    .holiday-date-month {
+        font-size: 0.62rem;
+        font-weight: 700;
+        letter-spacing: 0.4px;
+        text-transform: uppercase;
+        color: #6c757d;
+        margin-top: 4px;
+    }
+
+    /* =========================================================
+           HOLIDAY DETAILS
+           ========================================================= */
+
+    .holiday-name {
+        font-weight: 700;
+        color: var(--text-color, #212529);
+        transition: color 0.2s ease;
+    }
+
+    .holiday-calendar-table tbody tr:hover .holiday-name {
+        color: var(--bs-primary);
+    }
+
+    .holiday-date-text {
+        font-size: 0.85rem;
+    }
+
+    .holiday-type-badge {
+        padding: 7px 11px;
+        font-size: 0.72rem;
+        font-weight: 700;
+        border-radius: 999px;
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+        .holiday-type-badge:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 10px rgba(20, 30, 55, 0.08);
+        }
+
+    /* =========================================================
+           EMPTY STATE
+           ========================================================= */
+
+    .holiday-empty-state {
+        padding: 45px 15px !important;
+        animation: holidayPageEntrance 0.45s ease-out both;
+    }
+
+    .holiday-empty-icon {
+        width: 70px;
+        height: 70px;
+        margin: 0 auto 15px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(13, 110, 253, 0.08);
+        color: var(--bs-primary);
+        font-size: 1.8rem;
+        transition: transform 0.3s ease;
+    }
+
+    .holiday-empty-state:hover .holiday-empty-icon {
+        transform: scale(1.08) rotate(-5deg);
+    }
+
+    /* =========================================================
+           NEXT HOLIDAY PANEL
+           ========================================================= */
+
+    .holiday-next-panel {
+        border: 1px solid rgba(13, 110, 253, 0.12);
+        background: linear-gradient(135deg, rgba(13, 110, 253, 0.04), rgba(13, 110, 253, 0.01));
+        border-radius: 16px;
+        padding: 14px 16px;
+        animation: holidayStatEntrance 0.6s ease-out 0.30s both;
+    }
+
+    .holiday-next-label {
+        font-size: 0.68rem;
+        letter-spacing: 0.6px;
+        text-transform: uppercase;
+        font-weight: 700;
+        color: #6c757d;
+    }
+
+    .holiday-next-name {
+        font-size: 0.92rem;
+        font-weight: 700;
+        color: #212529;
+    }
+
+    /* =========================================================
+           RESPONSIVE
+           ========================================================= */
+
+    @@media (max-width: 767.98px) {
+
+        .holiday-calendar-header {
+            align-items: flex-start !important;
+        }
+
+        .holiday-calendar-card {
+            padding: 1rem !important;
+        }
+
+        .holiday-calendar-card-header {
+            align-items: flex-start !important;
+            gap: 10px;
+        }
+
+        .holiday-stat-card {
+            min-height: 105px;
+        }
+    }
+
+    /* =========================================================
+           REDUCED MOTION
+           ========================================================= */
+
+    @@media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+            animation-duration: 0.01ms !important;
+            animation-iteration-count: 1 !important;
+            transition-duration: 0.01ms !important;
+            scroll-behavior: auto !important;
+        }
+    }
+</style>
+
+<div class="container-fluid py-4 text-start holiday-calendar-page">
+
+    <!-- HEADER -->
+    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4 holiday-calendar-header">
+        <div>
+            <h4 class="fw-bold mb-1 holiday-calendar-title">
+                <span class="holiday-calendar-title-icon text-primary me-2">
+                    <i class="fa-solid fa-calendar-days"></i>
+                </span>
+                Company Holiday Calendar
+            </h4>
+
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb mb-0 small holiday-breadcrumb">
+                    <li class="breadcrumb-item">
+                        <a href="/Dashboard" class="text-decoration-none">
+                            Admin Dashboard
+                        </a>
+                    </li>
+                    <li class="breadcrumb-item active" aria-current="page">
+                        Holiday Calendar
+                    </li>
+                </ol>
+            </nav>
+        </div>
+    </div>
+
+    <!-- STAT CARDS -->
+    <div class="row g-3 mb-4">
+
+        <!-- Total Holidays -->
+        <div class="col-12 col-md-4">
+            <div class="card border-0 shadow-sm rounded-3 p-3 border-start border-4 border-primary holiday-stat-card">
+                <div class="d-flex align-items-center justify-content-between">
+                    <div>
+                        <div class="text-muted fw-semibold text-uppercase holiday-stat-label">
+                            Total Holidays
+                        </div>
+
+                        <h3 class="fw-bold text-dark mb-0 mt-2 holiday-stat-value">
+                            @totalHolidays
+                        </h3>
+                    </div>
+
+                    <div class="holiday-stat-icon bg-primary bg-opacity-10 text-primary">
+                        <i class="fa-solid fa-calendar-days fa-lg"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Upcoming Holidays -->
+        <div class="col-12 col-md-4">
+            <div class="card border-0 shadow-sm rounded-3 p-3 border-start border-4 border-success holiday-stat-card">
+                <div class="d-flex align-items-center justify-content-between">
+                    <div>
+                        <div class="text-muted fw-semibold text-uppercase holiday-stat-label">
+                            Upcoming Holidays
+                        </div>
+
+                        <h3 class="fw-bold text-dark mb-0 mt-2 holiday-stat-value">
+                            @upcomingHolidays.Count
+                        </h3>
+                    </div>
+
+                    <div class="holiday-stat-icon bg-success bg-opacity-10 text-success">
+                        <i class="fa-solid fa-calendar-check fa-lg"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Next Holiday -->
+        <div class="col-12 col-md-4">
+            <div class="card border-0 shadow-sm rounded-3 p-3 border-start border-4 border-warning holiday-stat-card">
+                <div class="d-flex align-items-center justify-content-between">
+                    <div class="overflow-hidden">
+                        <div class="text-muted fw-semibold text-uppercase holiday-stat-label">
+                            Next Holiday
+                        </div>
+
+                        @if (nextHoliday != null)
+                        {
+                            <div class="fw-bold text-dark mt-2 text-truncate holiday-stat-value">
+                                @nextHoliday.Date.ToString("dd MMM yyyy")
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="fw-bold text-muted mt-2 holiday-stat-value">
+                                None Scheduled
+                            </div>
+                        }
+                    </div>
+
+                    <div class="holiday-stat-icon bg-warning bg-opacity-10 text-warning">
+                        <i class="fa-solid fa-umbrella-beach fa-lg"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- HOLIDAY CALENDAR CARD -->
+    <div class="bg-white rounded-3 p-4 shadow-sm holiday-calendar-card">
+
+        <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-3 holiday-calendar-card-header">
+
+            <div>
+                <h6 class="fw-bold mb-1 text-secondary">
+                    Company Holiday Schedule
+                </h6>
+
+                <div class="text-muted holiday-calendar-subtitle">
+                    Official holidays available for all employees
+                </div>
+            </div>
+
+            <span class="badge text-dark border rounded-pill px-3 py-2 holiday-count-badge">
+                @totalHolidays Holiday@(totalHolidays != 1 ? "s" : "")
+            </span>
+
+        </div>
+
+        @if (nextHoliday != null)
+        {
+            <div class="holiday-next-panel mb-4 d-flex align-items-center justify-content-between">
+                <div>
+                    <div class="holiday-next-label">
+                        Next Upcoming Holiday
+                    </div>
+
+                    <div class="holiday-next-name">
+                        @nextHoliday.HolidayName
+                    </div>
+                </div>
+
+                <div class="text-end">
+                    <div class="fw-bold text-primary">
+                        @nextHoliday.Date.ToString("dd MMM yyyy")
+                    </div>
+
+                    <small class="text-muted">
+                        @nextHoliday.Date.ToString("dddd")
+                    </small>
+                </div>
+            </div>
+        }
+
+        <div class="table-responsive">
+
+            <table class="table table-hover align-middle mb-0 holiday-calendar-table">
+
+                <thead class="table-light">
+                    <tr>
+                        <th>Holiday</th>
+                        <th>Holiday Date</th>
+                        <th>Day</th>
+                        <th>Type</th>
+                    </tr>
+                </thead>
+
+                <tbody>
+
+                    @if (Model != null && Model.Any())
+                    {
+                        foreach (var h in Model.OrderBy(h => h.Date))
+                        {
+                            var isUpcoming = h.Date.Date >= DateTime.Today;
+
+                            var typeClass =
+                            h.Type == "Mandatory"
+                            ? "bg-primary-subtle text-primary"
+                            : h.Type == "Optional"
+                            ? "bg-success-subtle text-success"
+                            : h.Type == "Restricted"
+                            ? "bg-warning-subtle text-warning"
+                            : "bg-secondary-subtle text-secondary";
+
+                            <tr>
+
+                                <!-- HOLIDAY NAME -->
+                                <td>
+                                    <div class="d-flex align-items-center gap-3">
+
+                                        <div class="holiday-date-box">
+                                            <div class="holiday-date-day">
+                                                @h.Date.ToString("dd")
+                                            </div>
+
+                                            <div class="holiday-date-month">
+                                                @h.Date.ToString("MMM")
+                                            </div>
+                                        </div>
+
+                                        <div>
+                                            <div class="holiday-name">
+                                                @h.HolidayName
+                                            </div>
+
+                                            @if (isUpcoming)
+                                            {
+                                                <small class="text-success">
+                                                    <i class="fa-solid fa-circle-check me-1"></i>
+                                                    Upcoming Holiday
+                                                </small>
+                                            }
+                                            else
+                                            {
+                                                <small class="text-muted">
+                                                    Completed Holiday
+                                                </small>
+                                            }
+                                        </div>
+
+                                    </div>
+                                </td>
+
+                                <!-- DATE -->
+                                <td>
+                                    <span class="fw-semibold holiday-date-text">
+                                        @h.Date.ToString("dd MMM yyyy")
+                                    </span>
+                                </td>
+
+                                <!-- DAY -->
+                                <td>
+                                    <span class="text-muted">
+                                        @h.Date.ToString("dddd")
+                                    </span>
+                                </td>
+
+                                <!-- TYPE -->
+                                <td>
+                                    <span class="badge holiday-type-badge @typeClass">
+                                        <i class="fa-solid fa-tag me-1"></i>
+                                        @(string.IsNullOrEmpty(h.Type) ? "Company Holiday" : h.Type)
+                                    </span>
+                                </td>
+
+                            </tr>
+                        }
+                    }
+                    else
+                    {
+                        <tr>
+                            <td colspan="4"
+                                class="text-center text-muted holiday-empty-state">
+
+                                <div class="holiday-empty-icon">
+                                    <i class="fa-solid fa-calendar-xmark"></i>
+                                </div>
+
+                                <div class="fw-semibold text-dark mb-1">
+                                    No Holidays Available
+                                </div>
+
+                                <div class="small">
+                                    The company holiday calendar has not been updated yet.
+                                </div>
+
+                            </td>
+                        </tr>
+                    }
+
+                </tbody>
+
+            </table>
+
+        </div>
+    </div>
+
+</div>

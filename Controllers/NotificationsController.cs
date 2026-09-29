@@ -1,0 +1,446 @@
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using ERP_System.Data;
+using ERP_System.Models;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Security.Claims;
+using System.Threading.Tasks;
+
+namespace ERP_System.Controllers
+{
+    [Authorize]
+    public class NotificationsController : Controller
+    {
+        private readonly ApplicationDbContext _context;
+
+        // In-memory static store for demonstration & user interaction state across requests
+        private static List<NotificationItem>? _notificationStore;
+        private static readonly object _lock = new object();
+
+        public NotificationsController(ApplicationDbContext context)
+        {
+            _context = context;
+            EnsureNotificationsInitialized();
+        }
+
+        private async Task<(string name, string email, string role, int id)> GetCurrentUserAsync()
+        {
+            var userName = User.Identity?.Name ?? "admin";
+            var userEmailClaim = User.FindFirst(ClaimTypes.Email)?.Value;
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            var userRoleClaim = User.FindFirst(ClaimTypes.Role)?.Value;
+
+            User? dbUser = null;
+            if (!string.IsNullOrEmpty(userEmailClaim))
+            {
+                dbUser = await _context.Users.Include(u => u.Role).FirstOrDefaultAsync(u => u.Email == userEmailClaim);
+            }
+            if (dbUser == null && !string.IsNullOrEmpty(userName))
+            {
+                dbUser = await _context.Users.Include(u => u.Role).FirstOrDefaultAsync(u => u.UserName == userName || u.Email == userName || u.FullName == userName);
+            }
+            if (dbUser == null && int.TryParse(userIdClaim, out int uid))
+            {
+                dbUser = await _context.Users.Include(u => u.Role).FirstOrDefaultAsync(u => u.UserId == uid);
+            }
+
+            if (dbUser != null)
+            {
+                return (
+                    name: !string.IsNullOrEmpty(dbUser.FullName) ? dbUser.FullName : dbUser.UserName,
+                    email: dbUser.Email,
+                    role: dbUser.Role?.RoleName ?? userRoleClaim ?? "User",
+                    id: dbUser.UserId
+                );
+            }
+
+            return (
+                name: !string.IsNullOrEmpty(userName) ? userName : "Admin User",
+                email: !string.IsNullOrEmpty(userEmailClaim) ? userEmailClaim : (userName.Contains("@") ? userName : userName + "@erp.com"),
+                role: userRoleClaim ?? "Super Admin",
+                id: 1
+            );
+        }
+
+        // GET: /Notifications
+        [HttpGet]
+        public async Task<IActionResult> Index(string? category, string? status)
+        {
+            var currentUser = await GetCurrentUserAsync();
+
+            // Sync with latest ActivityLogs from DB
+            await SyncWithActivityLogsAsync(currentUser.email);
+
+            List<NotificationItem> list;
+            lock (_lock)
+            {
+                list = _notificationStore!.Where(n =>
+                    string.IsNullOrEmpty(n.TargetEmail) ||
+                    n.TargetEmail.Equals(currentUser.email, StringComparison.OrdinalIgnoreCase) ||
+                    (!string.IsNullOrEmpty(n.TargetRole) && n.TargetRole.Equals(currentUser.role, StringComparison.OrdinalIgnoreCase))
+                ).ToList();
+            }
+
+            if (!string.IsNullOrWhiteSpace(category))
+            {
+                list = list.Where(n => n.Category.Equals(category, StringComparison.OrdinalIgnoreCase)).ToList();
+            }
+
+            if (status == "unread")
+            {
+                list = list.Where(n => !n.IsRead).ToList();
+            }
+
+            int unreadCount;
+            int totalCount;
+            lock (_lock)
+            {
+                var userList = _notificationStore!.Where(n =>
+                    string.IsNullOrEmpty(n.TargetEmail) ||
+                    n.TargetEmail.Equals(currentUser.email, StringComparison.OrdinalIgnoreCase) ||
+                    (!string.IsNullOrEmpty(n.TargetRole) && n.TargetRole.Equals(currentUser.role, StringComparison.OrdinalIgnoreCase))
+                ).ToList();
+
+                unreadCount = userList.Count(n => !n.IsRead);
+                totalCount = userList.Count;
+            }
+
+            var viewModel = new NotificationViewModel
+            {
+                Notifications = list.OrderByDescending(n => n.CreatedAt).ToList(),
+                UnreadCount = unreadCount,
+                TotalCount = totalCount,
+                SelectedCategory = category ?? string.Empty,
+                FilterStatus = status ?? "all"
+            };
+
+            return View(viewModel);
+        }
+
+        // POST: /Notifications/MarkAsRead/5
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public IActionResult MarkAsRead(int id, string? category, string? status)
+        {
+            lock (_lock)
+            {
+                var item = _notificationStore?.FirstOrDefault(n => n.NotificationId == id);
+                if (item != null)
+                {
+                    item.IsRead = true;
+                }
+            }
+
+            TempData["SuccessMessage"] = "Notification marked as read.";
+            return RedirectToAction(nameof(Index), new { category, status });
+        }
+
+        // POST: /Notifications/MarkAllAsRead
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> MarkAllAsRead(string? category, string? status)
+        {
+            var currentUser = await GetCurrentUserAsync();
+            lock (_lock)
+            {
+                if (_notificationStore != null)
+                {
+                    foreach (var item in _notificationStore)
+                    {
+                        if (string.IsNullOrEmpty(item.TargetEmail) ||
+                            item.TargetEmail.Equals(currentUser.email, StringComparison.OrdinalIgnoreCase) ||
+                            (!string.IsNullOrEmpty(item.TargetRole) && item.TargetRole.Equals(currentUser.role, StringComparison.OrdinalIgnoreCase)))
+                        {
+                            item.IsRead = true;
+                        }
+                    }
+                }
+            }
+
+            TempData["SuccessMessage"] = "All notifications marked as read.";
+            return RedirectToAction(nameof(Index), new { category, status });
+        }
+
+        // POST: /Notifications/ClearNotification/5
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public IActionResult ClearNotification(int id, string? category, string? status)
+        {
+            lock (_lock)
+            {
+                if (_notificationStore != null)
+                {
+                    _notificationStore.RemoveAll(n => n.NotificationId == id);
+                }
+            }
+
+            TempData["SuccessMessage"] = "Notification cleared.";
+            return RedirectToAction(nameof(Index), new { category, status });
+        }
+
+        private void EnsureNotificationsInitialized()
+        {
+            lock (_lock)
+            {
+                if (_notificationStore == null)
+                {
+                    _notificationStore = new List<NotificationItem>
+                    {
+                        new NotificationItem
+                        {
+                            NotificationId = 1,
+                            Title = "New Sales Invoice Generated",
+                            Description = "Invoice INV-10045 created for Rahul Enterprises (₹25,000).",
+                            Category = "Sales",
+                            CreatedAt = DateTime.Now.AddMinutes(-12),
+                            IsRead = false,
+                            IconClass = "fa-file-invoice-dollar",
+                            ColorClass = "text-primary",
+                            BgColorClass = "bg-primary-subtle",
+                            TargetUrl = "/Sales",
+                            TargetEmail = ""
+                        },
+                        new NotificationItem
+                        {
+                            NotificationId = 2,
+                            Title = "Low Stock Alert: Smartphone",
+                            Description = "Product Smartphone stock quantity fell below reorder threshold (60 units remaining).",
+                            Category = "Inventory",
+                            CreatedAt = DateTime.Now.AddHours(-1),
+                            IsRead = false,
+                            IconClass = "fa-triangle-exclamation",
+                            ColorClass = "text-warning",
+                            BgColorClass = "bg-warning-subtle",
+                            TargetUrl = "/Inventory",
+                            TargetEmail = ""
+                        },
+                        new NotificationItem
+                        {
+                            NotificationId = 3,
+                            Title = "New Purchase Order Created",
+                            Description = "Purchase Order PO-10023 issued to Sharma Suppliers for ₹18,500.",
+                            Category = "Purchase",
+                            CreatedAt = DateTime.Now.AddHours(-2),
+                            IsRead = false,
+                            IconClass = "fa-cart-shopping",
+                            ColorClass = "text-success",
+                            BgColorClass = "bg-success-subtle",
+                            TargetUrl = "/Purchase",
+                            TargetEmail = ""
+                        },
+                        new NotificationItem
+                        {
+                            NotificationId = 4,
+                            Title = "New Employee Registered",
+                            Description = "John Doe joined as Senior Software Engineer under Engineering Branch.",
+                            Category = "HR",
+                            CreatedAt = DateTime.Now.AddHours(-4),
+                            IsRead = false,
+                            IconClass = "fa-user-plus",
+                            ColorClass = "text-info",
+                            BgColorClass = "bg-info-subtle",
+                            TargetUrl = "/EmployeeManagement",
+                            TargetEmail = ""
+                        },
+                        new NotificationItem
+                        {
+                            NotificationId = 5,
+                            Title = "Expense Voucher Approval Needed",
+                            Description = "Voucher EXP-10012 for Office Supplies (₹2,500) requires manager approval.",
+                            Category = "Finance",
+                            CreatedAt = DateTime.Now.AddDays(-1),
+                            IsRead = false,
+                            IconClass = "fa-receipt",
+                            ColorClass = "text-danger",
+                            BgColorClass = "bg-danger-subtle",
+                            TargetUrl = "/Expense",
+                            TargetEmail = ""
+                        }
+                    };
+                }
+            }
+        }
+
+        // Public static helper to push targeted notifications for profile & setting updates
+        public static void AddNotification(NotificationItem item)
+        {
+            lock (_lock)
+            {
+                if (_notificationStore == null)
+                {
+                    _notificationStore = new List<NotificationItem>();
+                }
+                int maxId = _notificationStore.Any() ? _notificationStore.Max(n => n.NotificationId) + 1 : 1;
+                item.NotificationId = maxId;
+                _notificationStore.Insert(0, item);
+            }
+        }
+
+        // GET: /Notifications/GetUserNotifications
+        [HttpGet]
+        public async Task<IActionResult> GetUserNotifications()
+        {
+            try
+            {
+                var currentUser = await GetCurrentUserAsync();
+                await SyncWithActivityLogsAsync(currentUser.email);
+
+                List<NotificationItem> list;
+                lock (_lock)
+                {
+                    list = (_notificationStore ?? new List<NotificationItem>()).Where(n =>
+                        string.IsNullOrEmpty(n.TargetEmail) ||
+                        n.TargetEmail.Equals(currentUser.email, StringComparison.OrdinalIgnoreCase) ||
+                        (!string.IsNullOrEmpty(n.TargetRole) && n.TargetRole.Equals(currentUser.role, StringComparison.OrdinalIgnoreCase))
+                    ).OrderByDescending(n => n.CreatedAt).ToList();
+                }
+
+                var unreadCount = list.Count(n => !n.IsRead);
+                var recent = list.Take(5).Select(n => new {
+                    id = n.NotificationId,
+                    title = n.Title ?? "Alert",
+                    message = n.Description ?? "",
+                    description = n.Description ?? "",
+                    category = n.Category ?? "System",
+                    createdAt = n.CreatedAt.ToString("HH:mm"),
+                    timeAgo = GetTimeAgo(n.CreatedAt),
+                    isRead = n.IsRead,
+                    iconClass = n.IconClass ?? "fa-bell",
+                    colorClass = n.ColorClass ?? "text-primary",
+                    targetUrl = n.TargetUrl ?? "/Notifications"
+                }).ToList();
+
+                return Json(new { success = true, count = unreadCount, unreadCount, totalCount = list.Count, notifications = recent });
+            }
+            catch (Exception ex)
+            {
+                return Json(new { success = false, count = 0, unreadCount = 0, totalCount = 0, notifications = new List<object>(), error = ex.Message });
+            }
+        }
+
+        // GET: /Notifications/_UserNotifications
+        [HttpGet]
+        public async Task<IActionResult> _UserNotifications()
+        {
+            try
+            {
+                var currentUser = await GetCurrentUserAsync();
+                await SyncWithActivityLogsAsync(currentUser.email);
+
+                List<NotificationItem> list;
+                lock (_lock)
+                {
+                    list = (_notificationStore ?? new List<NotificationItem>()).Where(n =>
+                        string.IsNullOrEmpty(n.TargetEmail) ||
+                        n.TargetEmail.Equals(currentUser.email, StringComparison.OrdinalIgnoreCase) ||
+                        (!string.IsNullOrEmpty(n.TargetRole) && n.TargetRole.Equals(currentUser.role, StringComparison.OrdinalIgnoreCase))
+                    ).OrderByDescending(n => n.CreatedAt).ToList();
+                }
+
+                var unreadCount = list.Count(n => !n.IsRead);
+                var recent = list.Take(5).Select(n => new {
+                    id = n.NotificationId,
+                    title = n.Title ?? "Alert",
+                    message = n.Description ?? "",
+                    description = n.Description ?? "",
+                    category = n.Category ?? "System",
+                    createdAt = n.CreatedAt.ToString("HH:mm"),
+                    timeAgo = GetTimeAgo(n.CreatedAt),
+                    isRead = n.IsRead,
+                    iconClass = n.IconClass ?? "fa-bell",
+                    colorClass = n.ColorClass ?? "text-primary",
+                    targetUrl = n.TargetUrl ?? "/Notifications"
+                }).ToList();
+
+                return Json(new { success = true, count = unreadCount, unreadCount, totalCount = list.Count, notifications = recent });
+            }
+            catch (Exception ex)
+            {
+                return Json(new { success = false, count = 0, unreadCount = 0, totalCount = 0, notifications = new List<object>(), error = ex.Message });
+            }
+        }
+
+        private static string GetTimeAgo(DateTime dt)
+        {
+            var span = DateTime.Now - dt;
+            if (span.TotalMinutes < 1) return "Just now";
+            if (span.TotalMinutes < 60) return $"{(int)span.TotalMinutes} mins ago";
+            if (span.TotalHours < 24) return $"{(int)span.TotalHours} hrs ago";
+            return $"{(int)span.TotalDays} days ago";
+        }
+
+        private async Task SyncWithActivityLogsAsync(string currentUserEmail)
+        {
+            try
+            {
+                var sysNotifs = await _context.SystemNotifications
+                    .Include(n => n.User)
+                    .OrderByDescending(n => n.CreatedAt)
+                    .Take(10)
+                    .ToListAsync();
+
+                lock (_lock)
+                {
+                    if (_notificationStore == null) _notificationStore = new List<NotificationItem>();
+                    foreach (var sn in sysNotifs)
+                    {
+                        if (!_notificationStore.Any(n => n.Title == sn.Title && n.Description == sn.Message && n.CreatedAt == sn.CreatedAt))
+                        {
+                            int maxId = _notificationStore.Any() ? _notificationStore.Max(n => n.NotificationId) + 1 : 1;
+                            _notificationStore.Insert(0, new NotificationItem
+                            {
+                                NotificationId = maxId,
+                                Title = sn.Title,
+                                Description = sn.Message,
+                                Category = string.IsNullOrEmpty(sn.Category) ? "HR" : sn.Category,
+                                CreatedAt = sn.CreatedAt,
+                                IsRead = sn.IsRead,
+                                IconClass = "fa-file-invoice-dollar",
+                                ColorClass = "text-success",
+                                BgColorClass = "bg-success-subtle",
+                                TargetUrl = !string.IsNullOrEmpty(sn.TargetUrl) ? sn.TargetUrl : "/HRPayroll/Payslips",
+                                TargetEmail = sn.User?.Email ?? ""
+                            });
+                        }
+                    }
+                }
+
+                var logs = await _context.ActivityLogs.OrderByDescending(a => a.CreatedAt).Take(5).ToListAsync();
+                lock (_lock)
+                {
+                    if (_notificationStore != null)
+                    {
+                        foreach (var log in logs)
+                        {
+                            if (!_notificationStore.Any(n => n.Title == log.Title && n.Description == log.Description))
+                            {
+                                int maxId = _notificationStore.Any() ? _notificationStore.Max(n => n.NotificationId) + 1 : 1;
+                                _notificationStore.Add(new NotificationItem
+                                {
+                                    NotificationId = maxId,
+                                    Title = log.Title,
+                                    Description = log.Description,
+                                    Category = "System",
+                                    CreatedAt = log.CreatedAt,
+                                    IsRead = false,
+                                    IconClass = string.IsNullOrEmpty(log.IconClass) ? "fa-info-circle" : log.IconClass,
+                                    ColorClass = string.IsNullOrEmpty(log.ColorClass) ? "text-primary" : log.ColorClass,
+                                    BgColorClass = "bg-primary-subtle",
+                                    TargetUrl = "/Dashboard",
+                                    TargetEmail = currentUserEmail
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+            catch
+            {
+                // Fallback gracefully if database table query encounters issue
+            }
+        }
+    }
+}
